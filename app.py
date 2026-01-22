@@ -223,39 +223,30 @@ else:
 
 
 # ---------------- Price Section ----------------
+# ----------------- Price Section -----------------
 st.header("Stock performance: previous years + growth rate")
-st.subheader("3D: NEE monthly return surface")
 
-nee = prices[prices["ticker"] == "NEE"].dropna(subset=["adj_close"]).copy()
-if nee.empty:
-    st.info("No NEE price data available.")
-else:
-    nee = nee.set_index("date").sort_index()
-    monthly = nee["adj_close"].resample("M").last().pct_change()
+# Load price history from DB
+prices = load_prices(tuple(peers))
 
-    surf = monthly.to_frame("ret").dropna()
-    surf["year"] = surf.index.year
-    surf["month"] = surf.index.month
-
-    pivot = surf.pivot(index="year", columns="month", values="ret")
-    pivot = pivot.sort_index()
-
-    fig_surface = px.imshow(
-        pivot,
-        aspect="auto",
-        labels=dict(x="Month", y="Year", color="Monthly Return"),
-        title="NEE Monthly Returns Heatmap (Year x Month)",
-    )
-    st.plotly_chart(fig_surface, use_container_width=True)
-
-prices = load_prices(tickers)
 if prices.empty:
-    st.warning("No price history in DB yet. Click Refresh / Ingest.")
+    st.warning("No price history in DB yet. Click 'Refresh / Ingest (Update DB)'.")
 else:
-    prices_n = normalize_series(prices.rename(columns={"date": "dt"}), date_col="dt", value_col="adj_close")
-    prices_n = prices_n.rename(columns={"dt": "date"})
+    # Ensure correct dtypes
+    prices = prices.copy()
+    prices["date"] = pd.to_datetime(prices["date"], errors="coerce")
+    prices = prices.dropna(subset=["date"]).sort_values(["ticker", "date"])
+
+    # --------- Normalized price chart (start=100) ----------
+    prices_n = normalize_series(
+    prices.rename(columns={"date": "dt"}),
+    date_col="dt",
+    value_col="adj_close",
+    ).rename(columns={"dt": "date"})
+
 
     c1, c2 = st.columns(2)
+
     with c1:
         st.subheader("Normalized Adj Close (start=100)")
         fig = plot_lines(
@@ -268,24 +259,31 @@ else:
         )
         st.pyplot(fig)
 
+    # --------- 3D / Heatmap: NEE monthly return surface ----------
     with c2:
-        st.subheader("Past stock growth rate (Price CAGR %)")
-        price_cagr = compute_cagr_windows(
-            prices.rename(columns={"date": "dt"}),
-            date_col="dt",
-            value_col="adj_close",
-            windows_years=(1, 3, 5, 10),
-        )
-        if price_cagr.empty:
-            st.info("Not enough history to compute price CAGR windows.")
-        else:
-            pvt = price_cagr.pivot_table(
-                index="ticker", columns="window_years", values="cagr_pct", aggfunc="first"
-            ).rename(columns={1: "1Y", 3: "3Y", 5: "5Y", 10: "10Y"})
-            if "5Y" in pvt.columns:
-                pvt = pvt.sort_values("5Y", ascending=False)
-            st.dataframe(pvt, use_container_width=True)
+        st.subheader("3D: NEE monthly return surface")
 
+        nee = prices[prices["ticker"] == "NEE"].dropna(subset=["adj_close"]).copy()
+
+        if nee.empty:
+            st.info("No NEE price data available yet. Click 'Refresh / Ingest (Update DB)' to fetch prices.")
+        else:
+            nee = nee.set_index("date").sort_index()
+            monthly = nee["adj_close"].resample("M").last().pct_change()
+
+            surf = monthly.to_frame("ret").dropna()
+            surf["year"] = surf.index.year
+            surf["month"] = surf.index.month
+
+            pivot = surf.pivot(index="year", columns="month", values="ret").sort_index()
+
+            fig_surface = px.imshow(
+                pivot,
+                aspect="auto",
+                labels=dict(x="Month", y="Year", color="Monthly Return"),
+                title="NEE Monthly Returns Heatmap (Year × Month)",
+            )
+            st.plotly_chart(fig_surface, use_container_width=True)
 
 # ---------------- Cross-metric Scatter ----------------
 st.header("Valuation vs Growth (scatter)")
