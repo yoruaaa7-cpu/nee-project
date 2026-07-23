@@ -27,9 +27,15 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
+import pathlib
+import re
+import subprocess
 import sys
 import time
+import urllib.parse
 import warnings
+import webbrowser
 
 warnings.filterwarnings("ignore")
 
@@ -230,7 +236,129 @@ def speak(tts_backend, text: str, voice: str) -> None:
 # Main loop
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Fast paths — instant, no LLM involved
+# ---------------------------------------------------------------------------
+
+FAST_APPS = {
+    "chrome": "chrome", "google chrome": "chrome", "browser": "chrome",
+    "edge": "msedge", "notepad": "notepad", "calculator": "calc",
+    "explorer": "explorer", "file explorer": "explorer", "files": "explorer",
+    "task manager": "taskmgr", "terminal": "wt", "powershell": "powershell",
+    "settings": "ms-settings:", "spotify": "spotify", "word": "winword",
+    "excel": "excel", "vs code": "code", "vscode": "code",
+}
+
+
+def try_fast_path(text: str) -> str | None:
+    """Handle common commands instantly, skipping the LLM entirely."""
+    cleaned = text.strip().strip(".!?,").lower()
+
+    m = re.match(r"^(?:please\s+)?(?:open|launch|start)\s+(.+)$", cleaned)
+    if m:
+        target = m.group(1).strip()
+        exe = FAST_APPS.get(target)
+        # Only fast-path things we recognize or single-word app names;
+        # anything fuzzier goes to the agent.
+        if exe or len(target.split()) == 1:
+            exe = exe or target
+            if sys.platform == "win32":
+                subprocess.Popen(f'start "" "{exe}"', shell=True)
+            else:
+                subprocess.Popen([exe])
+            return f"Opening {target}."
+
+    m = re.match(r"^(?:search(?:\s+the\s+web)?(?:\s+for)?|google)\s+(.+)$", cleaned)
+    if m:
+        q = m.group(1).strip()
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote(q))
+        return f"Searching the web for {q}."
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Active project — lets you say "run the tests" about the folder you work in
+# ---------------------------------------------------------------------------
+
+ACTIVE_PROJECT_FILE = (
+    pathlib.Path(os.environ.get("LOCALAPPDATA", str(pathlib.Path.home())))
+    / "OpenJarvis"
+    / "active_project.txt"
+)
+
+
+def get_active_project() -> str:
+    try:
+        p = ACTIVE_PROJECT_FILE.read_text(encoding="utf-8").strip()
+        if p and pathlib.Path(p).is_dir():
+            return p
+    except OSError:
+        pass
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# The acting agent (built once, reused every turn)
+# ---------------------------------------------------------------------------
+
+_AGENT_CACHE: dict = {}
+
+
+def get_agent(jarvis):
+    if "agent" in _AGENT_CACHE:
+        return _AGENT_CACHE["agent"]
+
+    # config.tools.enabled may be a comma-separated string or a list
+    raw = getattr(jarvis.config.tools, "enabled", "") or ""
+    if isinstance(raw, str):
+        tool_names = [t.strip() for t in raw.split(",") if t.strip()]
+    else:
+        tool_names = [str(t).strip() for t in raw if str(t).strip()]
+    if not tool_names:
+        tool_names = ["code_interpreter", "web_search", "file_read", "shell_exec"]
+
+    import openjarvis.tools  # noqa: F401
+    from openjarvis.core.registry import ToolRegistry
+
+    available = [n for n in tool_names if ToolRegistry.contains(n)]
+    print(f"[voice] Tools ready: {', '.join(available) or 'none'}")
+
+    jarvis._ensure_engine()
+    from openjarvis.agents.native_react import NativeReActAgent
+    from openjarvis.cli.ask import _build_tools
+
+    model = getattr(jarvis.config.intelligence, "default_model", "") or None
+    if not model:
+        models = jarvis._engine.list_models()
+        model = models[0] if models else "default"
+
+    tool_objects = _build_tools(available, jarvis.config, jarvis._engine, model)
+
+    def _approve(prompt: str) -> bool:
+        print(f"  [action] {prompt}")
+        return True  # auto-approve so voice commands actually execute
+
+    agent = NativeReActAgent(
+        jarvis._engine,
+        model,
+        tools=tool_objects,
+        bus=jarvis._bus,
+        max_turns=5,
+        max_tokens=512,
+        interactive=True,
+        confirm_callback=_approve,
+    )
+    _AGENT_CACHE["agent"] = agent
+    return agent
+
+
 def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
+    if use_tools:
+        fast = try_fast_path(text)
+        if fast is not None:
+            return fast
+
     query = text
     if history:
         context_block = "\n".join(f"User: {u}\nJarvis: {a}" for u, a in history[-4:])
@@ -241,40 +369,24 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
         )
 
     if use_tools:
-        # config.tools.enabled may be a comma-separated string or a list
-        raw = getattr(jarvis.config.tools, "enabled", "") or ""
-        if isinstance(raw, str):
-            tool_names = [t.strip() for t in raw.split(",") if t.strip()]
-        else:
-            tool_names = [str(t).strip() for t in raw if str(t).strip()]
-        if not tool_names:
-            tool_names = ["code_interpreter", "web_search", "file_read", "shell_exec"]
-
-        # Only offer tools this install actually has registered.
-        import openjarvis.tools  # noqa: F401
-        from openjarvis.core.registry import ToolRegistry
-
-        available = [n for n in tool_names if ToolRegistry.contains(n)]
-        dropped = [n for n in tool_names if n not in available]
-        if dropped:
-            print(f"[voice] Skipping unknown tools: {', '.join(dropped)}")
-
-        if available:
-            print(f"[voice] Acting with tools: {', '.join(available)}")
-            try:
-                result = jarvis.ask_full(
-                    query, agent="native_react", tools=available
-                )
-                for tr in result.get("tool_results") or []:
-                    name = tr.get("tool", tr.get("name", "tool"))
-                    arg = tr.get("input", tr.get("args", ""))
-                    print(f"  [action] {name}: {arg}")
-                content = (result.get("content") or "").strip()
-                if content:
-                    return content
-                print("[voice] Agent returned nothing; retrying as plain chat...")
-            except Exception as exc:
-                print(f"[voice] Tool agent failed ({exc}); answering without tools.")
+        project = get_active_project()
+        if project:
+            query = (
+                f'(Active project folder: {project} — run shell commands inside '
+                f'it, e.g. cd /d "{project}" && <command>)\n' + query
+            )
+        try:
+            agent = get_agent(jarvis)
+            result = agent.run(query)
+            for tr in getattr(result, "tool_results", []) or []:
+                out = (getattr(tr, "content", "") or "").strip().replace("\n", " ")
+                print(f"  [{getattr(tr, 'tool_name', 'tool')}] {out[:160]}")
+            content = (getattr(result, "content", "") or "").strip()
+            if content:
+                return content
+            print("[voice] Agent returned nothing; retrying as plain chat...")
+        except Exception as exc:
+            print(f"[voice] Tool agent failed ({exc}); answering without tools.")
 
     return jarvis.ask(query)
 
@@ -297,6 +409,11 @@ def main() -> None:
         help="Use Enter-to-record instead of the 'Hey Jarvis' wake word",
     )
     parser.add_argument(
+        "--project",
+        default="",
+        help="Set the active project folder Jarvis runs commands in",
+    )
+    parser.add_argument(
         "--no-tools",
         action="store_true",
         help="Chat only - don't let Jarvis run tools (shell, files, web)",
@@ -307,6 +424,15 @@ def main() -> None:
         help="Skip text-to-speech (voice input only)",
     )
     args = parser.parse_args()
+
+    if args.project:
+        ACTIVE_PROJECT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        ACTIVE_PROJECT_FILE.write_text(
+            str(pathlib.Path(args.project).resolve()), encoding="utf-8"
+        )
+    active = get_active_project()
+    if active:
+        print(f"[voice] Active project: {active}")
 
     print(f"[voice] Loading speech-to-text (faster-whisper '{args.stt_model}')...")
     from faster_whisper import WhisperModel
