@@ -230,7 +230,7 @@ def speak(tts_backend, text: str, voice: str) -> None:
 # Main loop
 # ---------------------------------------------------------------------------
 
-def ask_jarvis(jarvis, history: list, text: str) -> str:
+def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
     query = text
     if history:
         context_block = "\n".join(f"User: {u}\nJarvis: {a}" for u, a in history[-4:])
@@ -239,6 +239,25 @@ def ask_jarvis(jarvis, history: list, text: str) -> str:
             "natural to say out loud.\n\n"
             f"{context_block}\nUser: {text}"
         )
+
+    if use_tools:
+        tool_names = list(getattr(jarvis.config.tools, "enabled", []) or [])
+        if tool_names:
+            try:
+                result = jarvis.ask_full(
+                    query, agent="native_react", tools=tool_names
+                )
+                for tr in result.get("tool_results") or []:
+                    name = tr.get("tool", tr.get("name", "tool"))
+                    arg = tr.get("input", tr.get("args", ""))
+                    print(f"  [action] {name}: {arg}")
+                content = (result.get("content") or "").strip()
+                if content:
+                    return content
+                print("[voice] Agent returned nothing; retrying as plain chat...")
+            except Exception as exc:
+                print(f"[voice] Tool agent failed ({exc}); answering without tools.")
+
     return jarvis.ask(query)
 
 
@@ -258,6 +277,11 @@ def main() -> None:
         "--push-to-talk",
         action="store_true",
         help="Use Enter-to-record instead of the 'Hey Jarvis' wake word",
+    )
+    parser.add_argument(
+        "--no-tools",
+        action="store_true",
+        help="Chat only - don't let Jarvis run tools (shell, files, web)",
     )
     parser.add_argument(
         "--no-speak",
@@ -342,7 +366,7 @@ def main() -> None:
 
                 print("[voice] Thinking...")
                 started_at = time.time()
-                reply = ask_jarvis(jarvis, history, text)
+                reply = ask_jarvis(jarvis, history, text, use_tools=not args.no_tools)
                 print(f"Jarvis ({time.time() - started_at:.1f}s): {reply}\n")
                 history.append((text, reply))
 
@@ -370,7 +394,7 @@ def main() -> None:
 
                 print("[voice] Thinking...")
                 started_at = time.time()
-                reply = ask_jarvis(jarvis, history, text)
+                reply = ask_jarvis(jarvis, history, text, use_tools=not args.no_tools)
                 print(f"\nJarvis ({time.time() - started_at:.1f}s): {reply}\n")
                 history.append((text, reply))
                 if tts:
