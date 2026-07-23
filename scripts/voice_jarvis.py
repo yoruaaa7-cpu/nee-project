@@ -241,11 +241,29 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
         )
 
     if use_tools:
-        tool_names = list(getattr(jarvis.config.tools, "enabled", []) or [])
-        if tool_names:
+        # config.tools.enabled may be a comma-separated string or a list
+        raw = getattr(jarvis.config.tools, "enabled", "") or ""
+        if isinstance(raw, str):
+            tool_names = [t.strip() for t in raw.split(",") if t.strip()]
+        else:
+            tool_names = [str(t).strip() for t in raw if str(t).strip()]
+        if not tool_names:
+            tool_names = ["code_interpreter", "web_search", "file_read", "shell_exec"]
+
+        # Only offer tools this install actually has registered.
+        import openjarvis.tools  # noqa: F401
+        from openjarvis.core.registry import ToolRegistry
+
+        available = [n for n in tool_names if ToolRegistry.contains(n)]
+        dropped = [n for n in tool_names if n not in available]
+        if dropped:
+            print(f"[voice] Skipping unknown tools: {', '.join(dropped)}")
+
+        if available:
+            print(f"[voice] Acting with tools: {', '.join(available)}")
             try:
                 result = jarvis.ask_full(
-                    query, agent="native_react", tools=tool_names
+                    query, agent="native_react", tools=available
                 )
                 for tr in result.get("tool_results") or []:
                     name = tr.get("tool", tr.get("name", "tool"))
