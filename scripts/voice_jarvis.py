@@ -65,7 +65,31 @@ COMMAND_MAX_SECONDS = 12.0    # hard cap per utterance
 SILENCE_STOP_SECONDS = 1.2    # stop after this much trailing silence
 SPEECH_WAIT_SECONDS = 6.0     # give up if nothing said after the ding
 
-EXIT_PHRASES = {"goodbye", "good bye", "quit", "exit", "stop listening"}
+EXIT_PHRASES = {"goodbye", "good bye", "quit", "exit"}
+
+_SLEEP_EXACT = {
+    "shut down", "shutdown", "go to sleep", "sleep", "stand down",
+    "stop listening", "dismissed", "that's all",
+}
+_SLEEP_HINTS = ("shut down", "shutdown", "go to sleep", "stand down", "sleep")
+_WAKE_HINTS = ("wake up", "listen up", "wakey", "i need you", "you there", "hello")
+
+
+def _norm_phrase(text: str) -> str:
+    return re.sub(r"[^a-z ]", "", text.lower()).strip()
+
+
+def is_sleep_command(text: str) -> bool:
+    norm = _norm_phrase(text)
+    if norm in _SLEEP_EXACT:
+        return True
+    # "jarvis shut down", "shut down jarvis", etc.
+    return "jarvis" in norm and any(h in norm for h in _SLEEP_HINTS)
+
+
+def is_wake_command(text: str) -> bool:
+    norm = _norm_phrase(text)
+    return any(h in norm for h in _WAKE_HINTS)
 
 
 # ---------------------------------------------------------------------------
@@ -491,8 +515,26 @@ def main() -> None:
             stream.start()
             speech_threshold = calibrate_ambient(stream)
 
+            asleep = False
             while True:
                 wait_for_wake(stream, oww)
+
+                if asleep:
+                    # No ding while dormant - just quietly check for a wake-up.
+                    audio = record_command(stream, speech_threshold)
+                    text = transcribe(stt, audio)
+                    if text and is_wake_command(text):
+                        asleep = False
+                        print("\n[voice] Awake again.")
+                        stream.stop()
+                        if tts:
+                            speak(tts, "At your service.", args.voice)
+                        stream.start()
+                        print("[voice] Listening for 'Hey Jarvis'...")
+                    else:
+                        print(f"[voice] (asleep) ignored: {text or '...'}")
+                    continue
+
                 _ding()
                 print("\n[voice] Yes? (listening...)")
                 audio = record_command(stream, speech_threshold)
@@ -507,6 +549,19 @@ def main() -> None:
                     if tts:
                         speak(tts, "Goodbye.", args.voice)
                     break
+
+                if is_sleep_command(text):
+                    asleep = True
+                    print("[voice] Going to sleep. Say 'Hey Jarvis, wake up' to resume.")
+                    stream.stop()
+                    if tts:
+                        speak(
+                            tts,
+                            "Going to sleep. Say, Hey Jarvis, wake up, when you need me.",
+                            args.voice,
+                        )
+                    stream.start()
+                    continue
 
                 print("[voice] Thinking...")
                 started_at = time.time()
