@@ -37,7 +37,7 @@ function Stop-Jarvis {
 }
 
 function New-LauncherFile {
-    $psCommand = "Set-Location '$SrcDir'; uv run python voice_jarvis.py *>> '$LogFile'"
+    $psCommand = "Set-Location '$SrcDir'; uv run python voice_jarvis.py --browser *>> '$LogFile'"
     $vbs = @"
 ' Auto-generated: starts Jarvis voice mode hidden at logon.
 Set shell = CreateObject("WScript.Shell")

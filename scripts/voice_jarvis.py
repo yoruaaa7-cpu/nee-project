@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "1.8"
+VERSION = "1.9"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -493,6 +493,84 @@ def get_active_project() -> str:
 
 
 # ---------------------------------------------------------------------------
+# Browser control — persistent, logged-in profile so Jarvis can drive any site
+# ---------------------------------------------------------------------------
+
+BROWSER_ENABLED = False
+BROWSER_TOOLS = [
+    "browser_navigate", "browser_click", "browser_type",
+    "browser_extract", "browser_axtree", "browser_screenshot",
+]
+
+
+def _browser_profile_dir() -> str:
+    d = (
+        pathlib.Path(os.environ.get("LOCALAPPDATA", str(pathlib.Path.home())))
+        / "OpenJarvis"
+        / "browser_profile"
+    )
+    d.mkdir(parents=True, exist_ok=True)
+    return str(d)
+
+
+def enable_persistent_browser(headful: bool = True) -> None:
+    """Make OpenJarvis's browser tools use a persistent, logged-in Chrome
+    profile (so cookies/sessions survive) instead of a throwaway headless one."""
+    import openjarvis.tools.browser as bmod
+
+    profile = _browser_profile_dir()
+
+    def _ensure(self):
+        if self._page is not None:
+            return
+        from playwright.sync_api import sync_playwright
+
+        self._playwright = sync_playwright().start()
+        kwargs = dict(
+            headless=not headful,
+            no_viewport=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        try:
+            # Prefer the user's real Chrome — best for logins & bot-detection.
+            ctx = self._playwright.chromium.launch_persistent_context(
+                profile, channel="chrome", **kwargs
+            )
+        except Exception:
+            ctx = self._playwright.chromium.launch_persistent_context(
+                profile, **kwargs
+            )
+        self._browser = ctx  # BrowserContext also has .close()
+        self._page = ctx.pages[0] if ctx.pages else ctx.new_page()
+
+    bmod._BrowserSession._ensure_browser = _ensure
+
+
+def browser_login() -> None:
+    """Open the Jarvis browser profile visibly so you can log into your sites
+    once. Sessions are saved and reused by all future automation."""
+    enable_persistent_browser(headful=True)
+    from openjarvis.tools.browser import _session
+
+    page = _session.page
+    try:
+        page.goto("https://www.google.com")
+    except Exception:
+        pass
+    print("\n" + "=" * 58)
+    print("  A browser window is open using Jarvis's own profile.")
+    print("  Log into any sites you want Jarvis to use (Google, etc.).")
+    print("  When you're done, come back here and press Enter to save.")
+    print("=" * 58)
+    try:
+        input()
+    except EOFError:
+        pass
+    _session.close()
+    print("[voice] Logins saved to the Jarvis browser profile.")
+
+
+# ---------------------------------------------------------------------------
 # The acting agent (built once, reused every turn)
 # ---------------------------------------------------------------------------
 
@@ -511,6 +589,11 @@ def get_agent(jarvis):
         tool_names = [str(t).strip() for t in raw if str(t).strip()]
     if not tool_names:
         tool_names = ["code_interpreter", "web_search", "file_read", "shell_exec"]
+
+    if BROWSER_ENABLED:
+        for bt in BROWSER_TOOLS:
+            if bt not in tool_names:
+                tool_names.append(bt)
 
     import openjarvis.tools  # noqa: F401
     from openjarvis.core.registry import ToolRegistry
@@ -566,6 +649,8 @@ _TOOL_REFS = (
     "installed", "running", "what time", "current time", "today's date",
     "weather", "news", "latest", "current price", "stock", "flight", "flights",
     "on my screen", "screenshot", "the web", "online",
+    "website", "web site", ".com", ".org", "log in", "sign in", "checkout",
+    "add to cart", "calendar", "book ", "order ", "fill out", "on the site",
 )
 
 
@@ -647,6 +732,21 @@ def main() -> None:
         help="Port for the local dashboard (0 disables it)",
     )
     parser.add_argument(
+        "--browser",
+        action="store_true",
+        help="Enable browser control (persistent, logged-in Chrome profile)",
+    )
+    parser.add_argument(
+        "--browser-login",
+        action="store_true",
+        help="Open the Jarvis browser to log into your sites once, then exit",
+    )
+    parser.add_argument(
+        "--browser-headless",
+        action="store_true",
+        help="Run browser automation invisibly (default is a visible window)",
+    )
+    parser.add_argument(
         "--project",
         default="",
         help="Set the active project folder Jarvis runs commands in",
@@ -662,6 +762,21 @@ def main() -> None:
         help="Skip text-to-speech (voice input only)",
     )
     args = parser.parse_args()
+
+    # One-time login flow: open the profile browser, let the user sign in, exit.
+    if args.browser_login:
+        browser_login()
+        return
+
+    global BROWSER_ENABLED
+    if args.browser:
+        BROWSER_ENABLED = True
+        try:
+            enable_persistent_browser(headful=not args.browser_headless)
+            print("[voice] Browser control ON (persistent profile).")
+        except Exception as exc:
+            print(f"[voice] Browser control unavailable: {exc}")
+            BROWSER_ENABLED = False
 
     if args.project:
         ACTIVE_PROJECT_FILE.parent.mkdir(parents=True, exist_ok=True)
