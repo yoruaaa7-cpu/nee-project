@@ -5,8 +5,10 @@ Run from the OpenJarvis source dir:
     uv run python fix_brain.py --model claude-sonnet-4-6
     uv run python fix_brain.py --local             # revert to qwen3.5:2b (offline)
 
-It edits ~/.openjarvis/config.toml in place (keeping a .bak), checks the API
-key, and runs a timed test call so you know for certain which brain answered.
+It rewrites ~/.openjarvis/config.toml cleanly (keeping a .bak): duplicate
+sections are merged, duplicate keys de-duplicated (last wins), and the engine
++ model set correctly. Then it checks the API key and runs a timed test call
+so you know for certain which brain answered.
 """
 
 from __future__ import annotations
@@ -17,50 +19,51 @@ import pathlib
 import re
 import sys
 import time
+from collections import OrderedDict
+
+HEADER_RE = re.compile(r"^\s*\[([^\]]+)\]\s*$")
+KEYLINE_RE = re.compile(r"^\s*([A-Za-z0-9_.\-]+)\s*=(.*)$")
 
 
 def config_path() -> pathlib.Path:
     return pathlib.Path.home() / ".openjarvis" / "config.toml"
 
 
-def set_key_in_section(text: str, section: str, key: str, value: str) -> str:
-    """Set `key = "value"` inside [section], adding the section/key if absent."""
-    lines = text.splitlines()
-    out: list[str] = []
-    in_section = False
-    key_written = False
-    section_seen = False
-    header_re = re.compile(r"^\s*\[([^\]]+)\]\s*$")
-    key_re = re.compile(rf"^\s*{re.escape(key)}\s*=")
+def normalize_and_set(text: str, updates: dict) -> str:
+    """Parse a (possibly broken) TOML into sections, dedupe, apply updates.
 
-    for line in lines:
-        m = header_re.match(line)
+    - Merges repeated top-level sections into one.
+    - Within a section, a repeated key keeps the last value.
+    - Drops in-section comments (keeps top-of-file preamble comments).
+    Produces valid TOML that tomllib will accept.
+    """
+    preamble: list[str] = []
+    sections: "OrderedDict[str, OrderedDict[str, str]]" = OrderedDict()
+    cur: str | None = None
+
+    for line in text.splitlines():
+        m = HEADER_RE.match(line)
         if m:
-            # leaving the target section without having written the key -> add it
-            if in_section and not key_written:
-                out.append(f'{key} = "{value}"')
-                key_written = True
-            in_section = m.group(1) == section
-            if in_section:
-                section_seen = True
-            out.append(line)
+            cur = m.group(1)
+            sections.setdefault(cur, OrderedDict())
             continue
-        if in_section and key_re.match(line):
-            out.append(f'{key} = "{value}"')
-            key_written = True
-            continue
-        out.append(line)
+        km = KEYLINE_RE.match(line)
+        if km and cur is not None:
+            sections[cur][km.group(1)] = line.rstrip()
+        elif cur is None and line.strip():
+            preamble.append(line.rstrip())
 
-    if in_section and not key_written:
-        out.append(f'{key} = "{value}"')
-        key_written = True
+    for (sec, key), val in updates.items():
+        sections.setdefault(sec, OrderedDict())
+        sections[sec][key] = f'{key} = "{val}"'
 
-    if not section_seen:
-        out.append("")
-        out.append(f"[{section}]")
-        out.append(f'{key} = "{value}"')
-
-    return "\n".join(out) + "\n"
+    out: list[str] = list(preamble)
+    for name, keys in sections.items():
+        if out and out[-1] != "":
+            out.append("")
+        out.append(f"[{name}]")
+        out.extend(keys.values())
+    return "\n".join(out).strip() + "\n"
 
 
 def main() -> None:
@@ -82,17 +85,35 @@ def main() -> None:
     else:
         engine, model = "cloud", args.model
 
-    text = set_key_in_section(text, "engine", "default", engine)
-    text = set_key_in_section(text, "intelligence", "default_model", model)
-    cfg.write_text(text, encoding="utf-8")
-    print(f"[ok]   config set: engine={engine}, model={model}")
+    new_text = normalize_and_set(
+        text,
+        {
+            ("engine", "default"): engine,
+            ("intelligence", "default_model"): model,
+        },
+    )
+    cfg.write_text(new_text, encoding="utf-8")
+    print(f"[ok]   config rewritten cleanly: engine={engine}, model={model}")
     print(f"       (backup at {cfg.with_suffix('.toml.bak')})")
+
+    # Confirm it now parses.
+    try:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib  # type: ignore
+        with cfg.open("rb") as fh:
+            tomllib.load(fh)
+        print("[ok]   config.toml parses cleanly (no duplicate sections)")
+    except Exception as exc:
+        print(f"[fail] config still invalid: {exc}")
+        sys.exit(1)
 
     if not args.local:
         key = os.environ.get("ANTHROPIC_API_KEY", "")
         if not key:
             print("[fail] ANTHROPIC_API_KEY is NOT set for this process.")
-            print("       Run:  setx ANTHROPIC_API_KEY \"sk-ant-...\"")
+            print('       Run:  setx ANTHROPIC_API_KEY "sk-ant-..."')
             print("       then open a NEW PowerShell and run this again.")
             sys.exit(1)
         print(f"[ok]   API key present (sk-ant-...{key[-4:]})")
@@ -106,21 +127,22 @@ def main() -> None:
         reply = j.ask("Reply with exactly: JARVIS ONLINE")
     except Exception as exc:
         print(f"[fail] Test call errored: {exc}")
-        print("       Common causes: bad/again-not-loaded key, no billing credit,")
-        print("       or model name typo. Fix and re-run.")
+        print("       Common causes: no billing credit on the account,")
+        print("       a bad key, or a model-name typo. Fix and re-run.")
         sys.exit(1)
     elapsed = time.time() - started
 
     resolved = getattr(j, "_resolved_engine_key", "?")
     print(f"[ok]   Answered in {elapsed:.1f}s via engine '{resolved}'")
     print(f"       Reply: {reply.strip()[:120]}")
-    if resolved == "cloud" and elapsed < 15:
+    if resolved == "cloud" and elapsed < 20:
         print("\n[done] Cloud brain is live. Restart Jarvis voice to use it:")
-        print("       voice_jarvis_service.ps1 stop; voice_jarvis_service.ps1 start")
+        print("       .\\voice_jarvis_service.ps1 stop")
+        print("       .\\voice_jarvis_service.ps1 start")
     elif args.local:
         print("\n[done] Reverted to the local model.")
     else:
-        print("\n[warn] Did not resolve to the cloud engine - check the messages above.")
+        print("\n[warn] Did not resolve to the cloud engine - check messages above.")
 
 
 if __name__ == "__main__":
