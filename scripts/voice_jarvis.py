@@ -540,42 +540,79 @@ def get_agent(jarvis):
     return agent
 
 
+# Words that mean "do something on my machine / the web" -> needs the tool
+# agent. Everything else is a plain question and gets the fast chat lane.
+_ACTION_VERBS = (
+    "open", "close", "launch", "start", "stop", "run", "execute", "play",
+    "pause", "create", "make", "write", "delete", "remove", "move", "rename",
+    "copy", "install", "uninstall", "update", "download", "build", "test",
+    "compile", "commit", "push", "pull", "deploy", "send", "email", "message",
+    "text", "schedule", "remind", "set ", "click", "type", "navigate",
+    "screenshot", "lock", "mute", "search", "google", "find", "look up",
+    "browse", "go to", "check my", "list ", "show me my", "organize", "clean up",
+)
+# Real-time / system-specific references a chat model can't answer alone.
+_TOOL_REFS = (
+    "my ", "this computer", "this pc", "disk", "storage", "cpu", "memory",
+    "downloads", "desktop", "folder", "directory", " file", "files",
+    "installed", "running", "what time", "current time", "today's date",
+    "weather", "news", "latest", "current price", "stock", "flight", "flights",
+    "on my screen", "screenshot", "the web", "online",
+)
+
+
+def needs_tools(text: str) -> bool:
+    t = " " + text.lower().strip() + " "
+    if any(t.lstrip().startswith(v) or f" {v}" in t for v in _ACTION_VERBS):
+        return True
+    return any(ref in t for ref in _TOOL_REFS)
+
+
 def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
     if use_tools:
         fast = try_fast_path(text)
         if fast is not None:
             return fast
 
-    query = text
+    hist_block = ""
     if history:
-        context_block = "\n".join(f"User: {u}\nJarvis: {a}" for u, a in history[-4:])
-        query = (
-            "Continue this spoken conversation. Keep the reply short and "
-            "natural to say out loud.\n\n"
-            f"{context_block}\nUser: {text}"
+        hist_block = (
+            "\n".join(f"User: {u}\nJarvis: {a}" for u, a in history[-4:]) + "\n"
         )
 
-    if use_tools:
-        project = get_active_project()
-        if project:
-            query = (
-                f'(Active project folder: {project} — run shell commands inside '
-                f'it, e.g. cd /d "{project}" && <command>)\n' + query
-            )
-        try:
-            agent = get_agent(jarvis)
-            result = agent.run(query)
-            for tr in getattr(result, "tool_results", []) or []:
-                out = (getattr(tr, "content", "") or "").strip().replace("\n", " ")
-                print(f"  [{getattr(tr, 'tool_name', 'tool')}] {out[:160]}")
-            content = (getattr(result, "content", "") or "").strip()
-            if content:
-                return content
-            print("[voice] Agent returned nothing; retrying as plain chat...")
-        except Exception as exc:
-            print(f"[voice] Tool agent failed ({exc}); answering without tools.")
+    # Fast lane: plain questions/chat -> straight to Claude, no agent, no tools.
+    if not (use_tools and needs_tools(text)):
+        print("[voice] Quick answer")
+        chat_query = (
+            "You are Jarvis, a concise spoken assistant. Answer in 1-3 short "
+            "sentences, natural to say out loud. Give a direct opinion when "
+            "asked; don't hedge.\n\n"
+            f"{hist_block}User: {text}\nJarvis:"
+        )
+        return jarvis.ask(chat_query)
 
-    return jarvis.ask(query)
+    # Tool lane: real actions on the machine / web.
+    query = f"{hist_block}User: {text}" if hist_block else text
+    project = get_active_project()
+    if project:
+        query = (
+            f'(Active project folder: {project} — run shell commands inside '
+            f'it, e.g. cd /d "{project}" && <command>)\n' + query
+        )
+    try:
+        agent = get_agent(jarvis)
+        result = agent.run(query)
+        for tr in getattr(result, "tool_results", []) or []:
+            out = (getattr(tr, "content", "") or "").strip().replace("\n", " ")
+            print(f"  [{getattr(tr, 'tool_name', 'tool')}] {out[:160]}")
+        content = (getattr(result, "content", "") or "").strip()
+        if content:
+            return content
+        print("[voice] Agent returned nothing; retrying as plain chat...")
+    except Exception as exc:
+        print(f"[voice] Tool agent failed ({exc}); answering without tools.")
+
+    return jarvis.ask(text)
 
 
 def main() -> None:
