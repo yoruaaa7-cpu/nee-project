@@ -27,11 +27,13 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import pathlib
 import re
 import subprocess
 import sys
+import threading
 import time
 import urllib.parse
 import warnings
@@ -90,6 +92,83 @@ def is_sleep_command(text: str) -> bool:
 def is_wake_command(text: str) -> bool:
     norm = _norm_phrase(text)
     return any(h in norm for h in _WAKE_HINTS)
+
+
+# ---------------------------------------------------------------------------
+# Live state + dashboard server (http://localhost:8765)
+# ---------------------------------------------------------------------------
+
+STATE: dict = {
+    "status": "starting",   # starting|standby|listening|thinking|speaking|asleep|off
+    "log": [],
+    "last_command": "",
+    "last_reply": "",
+    "active_project": "",
+    "model": "",
+    "voice": "",
+    "started_at": time.time(),
+}
+
+
+def set_status(status: str) -> None:
+    STATE["status"] = status
+
+
+def log_event(kind: str, text: str) -> None:
+    STATE["log"].append(
+        {"t": time.strftime("%H:%M:%S"), "kind": kind, "text": str(text)[:200]}
+    )
+    del STATE["log"][:-40]
+
+
+def start_dashboard(port: int) -> None:
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    page_path = pathlib.Path(__file__).with_name("jarvis_dashboard.html")
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, *args):  # silence request spam
+            pass
+
+        def _send(self, code: int, ctype: str, body: bytes) -> None:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_GET(self):
+            if self.path.startswith("/state"):
+                try:
+                    import psutil
+
+                    STATE["cpu"] = psutil.cpu_percent(interval=None)
+                    vm = psutil.virtual_memory()
+                    STATE["mem_used_gb"] = round(vm.used / 2**30, 1)
+                    STATE["mem_total_gb"] = round(vm.total / 2**30, 1)
+                    STATE["mem_pct"] = vm.percent
+                    root = "C:\\" if sys.platform == "win32" else "/"
+                    STATE["disk_pct"] = psutil.disk_usage(root).percent
+                except Exception:
+                    pass
+                STATE["active_project"] = get_active_project()
+                STATE["uptime_s"] = int(time.time() - STATE["started_at"])
+                self._send(200, "application/json", json.dumps(STATE).encode())
+            elif page_path.exists():
+                self._send(200, "text/html; charset=utf-8", page_path.read_bytes())
+            else:
+                self._send(
+                    404,
+                    "text/plain",
+                    b"jarvis_dashboard.html not found next to voice_jarvis.py",
+                )
+
+    try:
+        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        print(f"[voice] Dashboard live at http://localhost:{port}")
+    except OSError as exc:
+        print(f"[voice] Dashboard disabled ({exc})")
 
 
 # ---------------------------------------------------------------------------
@@ -361,6 +440,7 @@ def get_agent(jarvis):
 
     def _approve(prompt: str) -> bool:
         print(f"  [action] {prompt}")
+        log_event("action", prompt)
         return True  # auto-approve so voice commands actually execute
 
     agent = NativeReActAgent(
@@ -433,6 +513,12 @@ def main() -> None:
         help="Use Enter-to-record instead of the 'Hey Jarvis' wake word",
     )
     parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=8765,
+        help="Port for the local dashboard (0 disables it)",
+    )
+    parser.add_argument(
         "--project",
         default="",
         help="Set the active project folder Jarvis runs commands in",
@@ -457,6 +543,11 @@ def main() -> None:
     active = get_active_project()
     if active:
         print(f"[voice] Active project: {active}")
+
+    if args.dashboard_port:
+        start_dashboard(args.dashboard_port)
+    STATE["voice"] = args.voice
+    log_event("system", "Boot sequence started")
 
     print(f"[voice] Loading speech-to-text (faster-whisper '{args.stt_model}')...")
     from faster_whisper import WhisperModel
@@ -490,7 +581,10 @@ def main() -> None:
     from openjarvis.sdk import Jarvis
 
     jarvis = Jarvis()
+    STATE["model"] = getattr(jarvis.config.intelligence, "default_model", "") or "auto"
     history: list[tuple[str, str]] = []
+    set_status("standby")
+    log_event("system", "All systems online — awaiting command")
 
     print()
     print("=" * 56)
@@ -525,6 +619,8 @@ def main() -> None:
                     text = transcribe(stt, audio)
                     if text and is_wake_command(text):
                         asleep = False
+                        set_status("standby")
+                        log_event("system", "Resumed from sleep")
                         print("\n[voice] Awake again.")
                         stream.stop()
                         if tts:
@@ -535,6 +631,7 @@ def main() -> None:
                         print(f"[voice] (asleep) ignored: {text or '...'}")
                     continue
 
+                set_status("listening")
                 _ding()
                 print("\n[voice] Yes? (listening...)")
                 audio = record_command(stream, speech_threshold)
@@ -542,16 +639,23 @@ def main() -> None:
                 text = transcribe(stt, audio)
                 if not text:
                     print("[voice] Didn't catch anything - say 'Hey Jarvis' and try again.")
+                    set_status("standby")
                     continue
                 print(f"You said: {text}")
+                STATE["last_command"] = text
+                log_event("user", text)
 
                 if text.lower().strip(" .!,") in EXIT_PHRASES:
+                    set_status("off")
+                    log_event("system", "Shutdown by voice command")
                     if tts:
                         speak(tts, "Goodbye.", args.voice)
                     break
 
                 if is_sleep_command(text):
                     asleep = True
+                    set_status("asleep")
+                    log_event("system", "Entering sleep mode")
                     print("[voice] Going to sleep. Say 'Hey Jarvis, wake up' to resume.")
                     stream.stop()
                     if tts:
@@ -564,16 +668,21 @@ def main() -> None:
                     continue
 
                 print("[voice] Thinking...")
+                set_status("thinking")
                 started_at = time.time()
                 reply = ask_jarvis(jarvis, history, text, use_tools=not args.no_tools)
                 print(f"Jarvis ({time.time() - started_at:.1f}s): {reply}\n")
                 history.append((text, reply))
+                STATE["last_reply"] = reply
+                log_event("jarvis", reply)
 
                 # Pause the mic while Jarvis speaks so it doesn't hear itself.
                 stream.stop()
+                set_status("speaking")
                 if tts:
                     speak(tts, reply, args.voice)
                 stream.start()
+                set_status("standby")
                 print("[voice] Listening for 'Hey Jarvis'...")
         else:
             while True:
