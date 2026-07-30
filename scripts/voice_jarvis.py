@@ -353,9 +353,60 @@ FAST_APPS = {
 }
 
 
+def _win_key(vk: int, times: int = 1) -> None:
+    """Tap a Windows virtual key (media/volume) via the OS, no extra deps."""
+    import ctypes
+
+    KEYEVENTF_KEYUP = 0x0002
+    for _ in range(times):
+        ctypes.windll.user32.keybd_event(vk, 0, 0, 0)
+        ctypes.windll.user32.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+
+
+def try_pc_control(cleaned: str) -> str | None:
+    """Instant OS controls: volume, media, lock. Windows only."""
+    if sys.platform != "win32":
+        return None
+
+    VK = {
+        "vol_up": 0xAF, "vol_down": 0xAE, "mute": 0xAD,
+        "play": 0xB3, "next": 0xB0, "prev": 0xB1, "stop": 0xB2,
+    }
+
+    if re.search(r"\b(volume up|louder|turn it up|increase volume)\b", cleaned):
+        _win_key(VK["vol_up"], 5); return "Volume up."
+    if re.search(r"\b(volume down|quieter|turn it down|lower the volume|decrease volume)\b", cleaned):
+        _win_key(VK["vol_down"], 5); return "Volume down."
+    if re.search(r"\b(mute|unmute|silence)\b", cleaned):
+        _win_key(VK["mute"]); return "Toggled mute."
+    if re.search(r"\b(pause|resume|play|play music|pause music)\b", cleaned):
+        _win_key(VK["play"]); return "Done."
+    if re.search(r"\b(next track|next song|skip)\b", cleaned):
+        _win_key(VK["next"]); return "Next track."
+    if re.search(r"\b(previous track|previous song|last song|go back a song)\b", cleaned):
+        _win_key(VK["prev"]); return "Previous track."
+    if re.search(r"\b(lock (the )?(computer|screen|pc)|lock it)\b", cleaned):
+        import ctypes
+        ctypes.windll.user32.LockWorkStation(); return "Locking the computer."
+    if re.search(r"\b(close|quit|kill) (.+)$", cleaned):
+        m = re.search(r"\b(?:close|quit|kill) (.+)$", cleaned)
+        app = m.group(1).strip().strip(".")
+        exe = FAST_APPS.get(app, app.split()[0])
+        if not exe.lower().endswith(".exe"):
+            exe += ".exe"
+        subprocess.Popen(f'taskkill /IM "{exe}" /F', shell=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return f"Closing {app}."
+    return None
+
+
 def try_fast_path(text: str) -> str | None:
     """Handle common commands instantly, skipping the LLM entirely."""
     cleaned = text.strip().strip(".!?,").lower()
+
+    pc = try_pc_control(cleaned)
+    if pc is not None:
+        return pc
 
     m = re.match(r"^(?:please\s+)?(?:open|launch|start)\s+(.+)$", cleaned)
     if m:
