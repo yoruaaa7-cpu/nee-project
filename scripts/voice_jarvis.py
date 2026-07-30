@@ -633,6 +633,26 @@ def main() -> None:
 
     jarvis = Jarvis()
     STATE["model"] = getattr(jarvis.config.intelligence, "default_model", "") or "auto"
+
+    # Resolve the brain up front and announce it loudly, so it's never a
+    # mystery which model is actually answering.
+    try:
+        jarvis._ensure_engine()
+        brain = jarvis._resolved_engine_key or "?"
+    except Exception as exc:
+        brain = f"unavailable ({exc})"
+    STATE["engine"] = brain
+    banner = f"BRAIN: {STATE['model']} via {brain}"
+    print("=" * 56)
+    print(f"  {banner}")
+    if brain == "cloud":
+        print("  (cloud model — fast, high quality)")
+    elif brain == "ollama":
+        print("  !! Using the LOCAL model, not the cloud. Check config +")
+        print("     ANTHROPIC_API_KEY + that 'anthropic' is installed.")
+    print("=" * 56)
+    log_event("system", banner)
+
     history: list[tuple[str, str]] = []
     set_status("standby")
     log_event("system", "All systems online — awaiting command")
