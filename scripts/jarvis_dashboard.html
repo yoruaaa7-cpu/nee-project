@@ -7,110 +7,82 @@
 <style>
   :root{
     --cyan:#37d0e6; --cyan-dim:#1b6d7a; --cyan-faint:rgba(55,208,230,.15);
-    --bg:#03070d; --panel:rgba(10,22,32,.45); --line:rgba(55,208,230,.28);
+    --bg:#03070d; --panel:rgba(10,22,32,.42); --line:rgba(55,208,230,.26);
     --text:#bfeaf2; --muted:#4d7f8c; --warn:#e6a437; --ok:#37e69a;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:"Consolas","SF Mono",ui-monospace,monospace;overflow:hidden}
-  body{background:
-    radial-gradient(1200px 800px at 50% 55%,rgba(55,208,230,.06),transparent 70%),
-    var(--bg);}
+  body{background:radial-gradient(1400px 900px at 50% 52%,rgba(55,208,230,.06),transparent 72%),var(--bg)}
   .grid{display:grid;height:100vh;padding:16px;gap:14px;
-    grid-template-columns:320px 1fr 320px;
-    grid-template-rows:64px 1fr 1fr;}
+    grid-template-columns:330px 1fr 330px;grid-template-rows:60px 1fr 1fr;
+    transition:opacity .4s}
   header{grid-column:1/4;display:flex;align-items:center;justify-content:space-between;
     border-bottom:1px solid var(--line);padding-bottom:8px}
   .brand{display:flex;align-items:baseline;gap:16px}
-  .brand h1{margin:0;font-size:26px;letter-spacing:8px;color:var(--cyan);
+  .brand h1{margin:0;font-size:24px;letter-spacing:8px;color:var(--cyan);
     text-shadow:0 0 18px rgba(55,208,230,.5)}
-  .brand span{color:var(--muted);letter-spacing:3px;font-size:11px}
-  .hstat{display:flex;gap:34px;align-items:center;font-size:11px;letter-spacing:2px}
-  .hstat b{display:block;color:#fff;font-size:15px;letter-spacing:1px;margin-top:3px}
+  .brand span{color:var(--muted);letter-spacing:3px;font-size:10px}
+  .hstat{display:flex;gap:28px;align-items:center;font-size:10px;letter-spacing:2px}
+  .hstat b{display:block;color:#fff;font-size:14px;letter-spacing:1px;margin-top:3px}
   .hstat i{color:var(--muted);font-style:normal}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
-    background:var(--ok);box-shadow:0 0 10px var(--ok);margin-right:6px;
-    animation:pulse 2s infinite}
+    background:var(--ok);box-shadow:0 0 10px var(--ok);margin-right:6px;animation:pulse 2s infinite}
   @keyframes pulse{50%{opacity:.35}}
+  .ctrls{display:flex;gap:8px;margin-left:12px}
+  .ctrls button{background:transparent;border:1px solid var(--line);color:var(--cyan);
+    width:34px;height:34px;font-size:15px;cursor:pointer;border-radius:4px}
+  .ctrls button:hover{background:var(--cyan-faint)}
   .panel{position:relative;background:var(--panel);border:1px solid var(--line);
     padding:16px;overflow:hidden;
-    -webkit-clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px));
-    clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px));}
-  .panel::after{content:"";position:absolute;inset:0;pointer-events:none;
-    box-shadow:inset 0 0 40px rgba(55,208,230,.05)}
+    clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
   .ptitle{display:flex;justify-content:space-between;font-size:10px;letter-spacing:3px;
     color:var(--muted);border-bottom:1px solid var(--cyan-faint);padding-bottom:8px;margin-bottom:14px}
   .ptitle b{color:var(--cyan)}
-  .col-left{display:flex;flex-direction:column;gap:14px;grid-row:2/4}
-  .col-right{display:flex;flex-direction:column;gap:14px;grid-row:2/4}
-  .center{grid-column:2;grid-row:2/4;display:flex;flex-direction:column;
-    align-items:center;justify-content:center;position:relative}
+  .col-left,.col-right{display:flex;flex-direction:column;gap:14px;grid-row:2/4}
+  .center{grid-column:2;grid-row:2/4;position:relative}
+  #core{position:absolute;inset:0;width:100%;height:100%;display:block}
 
-  /* meters */
-  .meter{margin:14px 0}
-  .meter label{display:flex;justify-content:space-between;font-size:11px;
-    letter-spacing:2px;color:var(--muted);margin-bottom:6px}
+  .meter{margin:13px 0}
+  .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:6px}
   .meter label b{color:#fff}
   .bar{height:6px;background:rgba(55,208,230,.1);position:relative;overflow:hidden}
-  .bar>i{position:absolute;left:0;top:0;bottom:0;background:var(--cyan);
-    box-shadow:0 0 12px var(--cyan);transition:width .5s}
+  .bar>i{position:absolute;left:0;top:0;bottom:0;background:var(--cyan);box-shadow:0 0 12px var(--cyan);transition:width .5s}
 
-  /* reactor */
-  .reactor{width:min(46vh,440px);aspect-ratio:1;position:relative;
-    display:flex;align-items:center;justify-content:center}
-  .ring{position:absolute;border-radius:50%;border:1px solid var(--cyan-dim)}
-  .r1{inset:0;border-style:dashed;animation:spin 26s linear infinite}
-  .r2{inset:11%;border-color:var(--line);animation:spin 18s linear infinite reverse}
-  .r3{inset:24%;border-color:var(--cyan-faint)}
-  .cross{position:absolute;inset:24%;}
-  .cross::before,.cross::after{content:"";position:absolute;background:var(--cyan-faint)}
-  .cross::before{left:50%;top:0;bottom:0;width:1px}
-  .cross::after{top:50%;left:0;right:0;height:1px}
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .core{width:26%;aspect-ratio:1;border:1px solid var(--cyan);border-radius:6px;
-    display:flex;align-items:center;justify-content:center;text-align:center;
-    font-size:11px;letter-spacing:2px;color:var(--cyan);
-    box-shadow:0 0 30px rgba(55,208,230,.4),inset 0 0 20px rgba(55,208,230,.3);
-    animation:breathe 3s ease-in-out infinite}
-  @keyframes breathe{50%{box-shadow:0 0 55px rgba(55,208,230,.7),inset 0 0 26px rgba(55,208,230,.5)}}
-  .statusword{margin-top:26px;font-size:20px;letter-spacing:8px;color:var(--cyan);
-    text-shadow:0 0 16px rgba(55,208,230,.5);text-transform:uppercase}
-  .subword{margin-top:8px;color:var(--muted);font-size:11px;letter-spacing:3px}
-
-  /* waveform */
-  .wave{display:flex;gap:3px;align-items:flex-end;height:34px;margin-top:22px}
-  .wave i{width:3px;background:var(--cyan);opacity:.8;height:6px;border-radius:2px}
-  body[data-live="1"] .wave i{animation:eq .8s ease-in-out infinite}
-  .wave i:nth-child(2n){animation-delay:.15s}
-  .wave i:nth-child(3n){animation-delay:.3s}
-  .wave i:nth-child(4n){animation-delay:.45s}
-  @keyframes eq{50%{height:30px}}
-
-  /* log + convo */
-  .log{font-size:11px;line-height:1.9;height:100%;overflow:hidden;display:flex;
-    flex-direction:column-reverse}
+  .log{font-size:11px;line-height:1.85;height:100%;overflow:hidden;display:flex;flex-direction:column-reverse}
   .log .row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .log .t{color:var(--cyan-dim)}
   .log .user{color:#fff}.log .jarvis{color:var(--cyan)}
   .log .action{color:var(--warn)}.log .system{color:var(--muted)}
   .convo b{color:var(--muted);font-size:10px;letter-spacing:2px;display:block;margin-bottom:4px}
-  .convo p{margin:0 0 16px;font-size:13px;line-height:1.5}
+  .convo p{margin:0 0 14px;font-size:13px;line-height:1.5}
   .convo .cmd{color:#fff}.convo .rep{color:var(--cyan)}
   .grow{flex:1;min-height:0}
-  .off{color:var(--warn) !important}
+
+  /* focus mode: only the living core */
+  body.focus .grid{grid-template-columns:0 1fr 0}
+  body.focus .col-left,body.focus .col-right,body.focus header{display:none}
+  body.focus .center{grid-column:1/4}
+  .statuslabel{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);
+    font-size:12px;letter-spacing:6px;color:var(--muted);text-transform:uppercase;
+    opacity:0;transition:opacity .3s;pointer-events:none}
+  body.focus .statuslabel{opacity:.7}
 </style>
 </head>
-<body data-live="0">
+<body>
 <div class="grid">
   <header>
-    <div class="brand">
-      <h1>JARVIS</h1><span>JUST A RATHER VERY INTELLIGENT SYSTEM</span>
-    </div>
+    <div class="brand"><h1>JARVIS</h1><span>JUST A RATHER VERY INTELLIGENT SYSTEM</span></div>
     <div class="hstat">
-      <div><i>SYSTEM STATUS</i><b id="hstatus"><span class="dot"></span>BOOTING</b></div>
+      <div><i>STATUS</i><b id="hstatus"><span class="dot"></span>BOOTING</b></div>
       <div><i>MODEL</i><b id="hmodel">—</b></div>
+      <div><i>ENGINE</i><b id="hengine">—</b></div>
       <div><i>UPTIME</i><b id="huptime">0s</b></div>
-      <div><i>LOCAL TIME</i><b id="hclock">--:--:--</b></div>
+      <div><i>TIME</i><b id="hclock">--:--:--</b></div>
+      <div class="ctrls">
+        <button id="focusBtn" title="Focus mode (F)">◎</button>
+        <button id="fsBtn" title="Fullscreen (F11)">⛶</button>
+      </div>
     </div>
   </header>
 
@@ -131,14 +103,8 @@
   </div>
 
   <div class="center">
-    <div class="reactor">
-      <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
-      <div class="cross"></div>
-      <div class="core" id="core">CORE<br>ACTIVE</div>
-    </div>
-    <div class="statusword" id="statusword">STANDBY</div>
-    <div class="subword" id="subword">awaiting "Hey Jarvis"</div>
-    <div class="wave" id="wave"></div>
+    <canvas id="core"></canvas>
+    <div class="statuslabel" id="statuslabel">standby</div>
   </div>
 
   <div class="col-right">
@@ -157,61 +123,185 @@
 </div>
 
 <script>
-  const $ = id => document.getElementById(id);
-  const wave = $("wave");
-  for(let i=0;i<28;i++){wave.appendChild(document.createElement("i"));}
+const $ = id => document.getElementById(id);
 
-  const SUB = {
-    starting:"initializing subsystems", standby:'awaiting "Hey Jarvis"',
-    listening:"listening…", thinking:"processing request",
-    speaking:"responding", asleep:'dormant — say "wake up"', off:"offline"
-  };
-  const LIVE = new Set(["listening","thinking","speaking"]);
+/* ---------- reactive neural / heartbeat core ---------- */
+const cv = $("core"), cx = cv.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
 
-  function fmtUptime(s){
-    const h=Math.floor(s/3600),m=Math.floor(s%3600/60),ss=s%60;
-    return (h?h+"h ":"")+(m||h?m+"m ":"")+ss+"s";
+function resize(){
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cx.setTransform(DPR,0,0,DPR,0,0);
+}
+new ResizeObserver(resize).observe(cv);
+window.addEventListener("resize", resize); resize();
+
+// status -> feel of the core
+const STYLE = {
+  starting:{bpm:70, rgb:[55,208,230], fire:.3, ring:.6},
+  standby: {bpm:56, rgb:[55,208,230], fire:.25,ring:.5},
+  listening:{bpm:92,rgb:[120,232,255],fire:.5, ring:1.2},
+  thinking:{bpm:138,rgb:[255,180,58], fire:1.0, ring:1.0},
+  speaking:{bpm:108,rgb:[55,230,160], fire:.7, ring:1.4},
+  asleep:  {bpm:26, rgb:[36,96,130],  fire:.08,ring:.2},
+  off:     {bpm:0,  rgb:[90,92,104],  fire:0,  ring:0},
+};
+let cur = {...STYLE.standby, rgb:[...STYLE.standby.rgb]};
+let target = STYLE.standby;
+let statusName = "standby";
+
+// brain node cloud (points on a sphere)
+const N = 190, nodes = [];
+for(let i=0;i<N;i++){
+  const y = 1 - (i/(N-1))*2;
+  const rad = Math.sqrt(1-y*y);
+  const theta = i * 2.399963; // golden angle
+  nodes.push({x:Math.cos(theta)*rad, y, z:Math.sin(theta)*rad, f:Math.random()});
+}
+const rings = [];   // expanding pulse rings
+let beatPhase = 0, lastBeat = -1, t0 = performance.now();
+
+function heartbeat(x){ // x in [0,1) -> lub-dub curve 0..1
+  const a = Math.exp(-Math.pow((x-0.10)/0.045,2));
+  const b = 0.55*Math.exp(-Math.pow((x-0.26)/0.055,2));
+  return Math.min(1, a+b);
+}
+const lerp=(a,b,k)=>a+(b-a)*k;
+const rgb=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+
+function frame(now){
+  const dt = Math.min(0.05,(now - t0)/1000); t0 = now;
+  // ease colours & values toward the current status
+  cur.bpm = lerp(cur.bpm, target.bpm, .05);
+  cur.fire = lerp(cur.fire, target.fire, .05);
+  cur.ring = lerp(cur.ring, target.ring, .05);
+  for(let i=0;i<3;i++) cur.rgb[i] = lerp(cur.rgb[i], target.rgb[i], .05);
+
+  cx.clearRect(0,0,W,H);
+  const cxp=W/2, cyp=H/2, base=Math.min(W,H)*0.16;
+
+  // beat timing
+  let beat=0;
+  if(cur.bpm>1){
+    const period = 60/cur.bpm;
+    beatPhase = (beatPhase + dt/period) % 1;
+    beat = heartbeat(beatPhase);
+    if(beatPhase < lastBeat){ // new beat -> spawn ring
+      rings.push({r:base*0.9, a:0.5*cur.ring});
+    }
+    lastBeat = beatPhase;
   }
 
-  async function tick(){
-    $("hclock").textContent = new Date().toLocaleTimeString();
-    try{
-      const s = await (await fetch("/state")).json();
-      const st = s.status||"standby";
-      $("statusword").textContent = st.toUpperCase();
-      $("subword").textContent = SUB[st]||"";
-      $("hstatus").innerHTML = '<span class="dot"></span>'+st.toUpperCase();
-      document.body.dataset.live = LIVE.has(st) ? "1":"0";
-      $("core").classList.toggle("off", st==="off"||st==="asleep");
+  // expanding rings
+  for(let i=rings.length-1;i>=0;i--){
+    const rg=rings[i];
+    rg.r += (Math.min(W,H)*0.35)*dt;
+    rg.a -= 0.35*dt;
+    if(rg.a<=0){ rings.splice(i,1); continue; }
+    cx.beginPath(); cx.arc(cxp,cyp,rg.r,0,7);
+    cx.strokeStyle=rgb(cur.rgb,rg.a); cx.lineWidth=1.5; cx.stroke();
+  }
 
-      $("hmodel").textContent = s.model||"—";
-      $("voice").textContent = s.voice||"—";
-      $("huptime").textContent = fmtUptime(s.uptime_s||0);
-      $("project").textContent = s.active_project||"none set";
-
-      if(s.cpu!=null){$("cpu").textContent=Math.round(s.cpu)+"%";$("cpubar").style.width=s.cpu+"%";}
-      if(s.mem_pct!=null){
-        $("mem").textContent=(s.mem_used_gb||0)+" / "+(s.mem_total_gb||0)+" GB";
-        $("membar").style.width=s.mem_pct+"%";
+  // rotating brain node cloud + synapses
+  const rot=now/2600, cosR=Math.cos(rot), sinR=Math.sin(rot);
+  const R=Math.min(W,H)*0.30, pts=[];
+  for(const n of nodes){
+    const x = n.x*cosR - n.z*sinR;
+    const z = n.x*sinR + n.z*cosR;
+    const depth=(z+1)/2;               // 0 back .. 1 front
+    n.f += (Math.random()-0.5)*cur.fire*0.15;
+    n.f = Math.max(0,Math.min(1,n.f));
+    pts.push({sx:cxp+x*R, sy:cyp+n.y*R*0.92, depth, f:n.f});
+  }
+  // synapse lines between nearby nodes
+  cx.lineWidth=1;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    for(let j=i+1;j<i+6 && j<pts.length;j++){
+      const q=pts[j], dx=p.sx-q.sx, dy=p.sy-q.sy;
+      const d2=dx*dx+dy*dy;
+      if(d2 < (R*0.28)*(R*0.28)){
+        const a=(1-Math.sqrt(d2)/(R*0.28))*0.18*((p.depth+q.depth)/2);
+        cx.strokeStyle=rgb(cur.rgb,a); cx.beginPath();
+        cx.moveTo(p.sx,p.sy); cx.lineTo(q.sx,q.sy); cx.stroke();
       }
-      if(s.disk_pct!=null){$("disk").textContent=Math.round(s.disk_pct)+"%";$("diskbar").style.width=s.disk_pct+"%";}
-
-      $("cmd").textContent = s.last_command||"—";
-      $("rep").textContent = s.last_reply||"—";
-
-      const log = $("log");
-      log.innerHTML = (s.log||[]).slice().reverse().map(e =>
-        `<div class="row"><span class="t">[${e.t}]</span> <span class="${e.kind}">${
-          e.kind==="user"?"▸ ":e.kind==="jarvis"?"◂ ":e.kind==="action"?"⚡ ":"· "
-        }${escapeHtml(e.text)}</span></div>`).join("");
-    }catch(e){
-      $("statusword").textContent="OFFLINE";
-      $("subword").textContent="voice service not running";
-      $("hstatus").innerHTML='<span class="dot" style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></span>OFFLINE';
     }
   }
-  function escapeHtml(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
-  tick(); setInterval(tick,1000);
+  // node dots (firing)
+  for(const p of pts){
+    const glow=0.25+0.75*p.f, size=(0.7+p.depth*1.8)*(0.8+beat*0.5);
+    cx.fillStyle=rgb(cur.rgb, (0.2+0.8*p.depth)*glow);
+    cx.beginPath(); cx.arc(p.sx,p.sy,size,0,7); cx.fill();
+  }
+
+  // pulsing core orb (the "heart")
+  const rCore = base*(0.75 + beat*0.42);
+  const g=cx.createRadialGradient(cxp,cyp,0,cxp,cyp,rCore);
+  g.addColorStop(0, rgb(cur.rgb, 0.95));
+  g.addColorStop(0.4, rgb(cur.rgb, 0.5));
+  g.addColorStop(1, rgb(cur.rgb, 0));
+  cx.fillStyle=g; cx.beginPath(); cx.arc(cxp,cyp,rCore,0,7); cx.fill();
+  // bright center
+  cx.fillStyle=rgb([Math.min(255,cur.rgb[0]+90),Math.min(255,cur.rgb[1]+90),Math.min(255,cur.rgb[2]+90)], 0.6+beat*0.4);
+  cx.beginPath(); cx.arc(cxp,cyp,base*0.28*(0.9+beat*0.3),0,7); cx.fill();
+
+  // crosshair reticle
+  cx.strokeStyle=rgb(cur.rgb,0.12); cx.lineWidth=1;
+  cx.beginPath();
+  cx.moveTo(cxp-R,cyp); cx.lineTo(cxp+R,cyp);
+  cx.moveTo(cxp,cyp-R); cx.lineTo(cxp,cyp+R); cx.stroke();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ---------- controls ---------- */
+$("fsBtn").onclick = () => document.fullscreenElement
+  ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+$("focusBtn").onclick = () => document.body.classList.toggle("focus");
+addEventListener("keydown", e=>{
+  if(e.key==="f"||e.key==="F") document.body.classList.toggle("focus");
+  if(e.key==="Escape") document.body.classList.remove("focus");
+});
+
+/* ---------- state polling ---------- */
+const SUB={starting:"initializing",standby:'awaiting "Hey Jarvis"',listening:"listening…",
+  thinking:"processing",speaking:"responding",asleep:"dormant",off:"offline"};
+function fmtUptime(s){const h=(s/3600)|0,m=((s%3600)/60)|0,ss=s%60;
+  return (h?h+"h ":"")+(m||h?m+"m ":"")+ss+"s";}
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+
+async function tick(){
+  $("hclock").textContent=new Date().toLocaleTimeString();
+  try{
+    const s=await (await fetch("/state")).json();
+    const st=s.status||"standby";
+    if(st!==statusName){ statusName=st; target=STYLE[st]||STYLE.standby; }
+    $("hstatus").innerHTML='<span class="dot"></span>'+st.toUpperCase();
+    $("statuslabel").textContent=(SUB[st]||st);
+    $("hmodel").textContent=s.model||"—";
+    $("hengine").textContent=s.engine||"—";
+    $("huptime").textContent=fmtUptime(s.uptime_s||0);
+    $("project").textContent=s.active_project||"none set";
+    $("voice").textContent=s.voice||"—";
+    if(s.cpu!=null){$("cpu").textContent=Math.round(s.cpu)+"%";$("cpubar").style.width=s.cpu+"%";}
+    if(s.mem_pct!=null){$("mem").textContent=(s.mem_used_gb||0)+" / "+(s.mem_total_gb||0)+" GB";$("membar").style.width=s.mem_pct+"%";}
+    if(s.disk_pct!=null){$("disk").textContent=Math.round(s.disk_pct)+"%";$("diskbar").style.width=s.disk_pct+"%";}
+    $("cmd").textContent=s.last_command||"—";
+    $("rep").textContent=s.last_reply||"—";
+    $("log").innerHTML=(s.log||[]).slice().reverse().map(e=>
+      `<div class="row"><span class="t">[${e.t}]</span> <span class="${e.kind}">${
+        e.kind==="user"?"▸ ":e.kind==="jarvis"?"◂ ":e.kind==="action"?"⚡ ":"· "
+      }${esc(e.text)}</span></div>`).join("");
+  }catch(e){
+    statusName="off"; target=STYLE.off;
+    $("hstatus").innerHTML='<span class="dot" style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></span>OFFLINE';
+    $("statuslabel").textContent="voice service offline";
+  }
+}
+tick(); setInterval(tick,1000);
 </script>
 </body>
 </html>
