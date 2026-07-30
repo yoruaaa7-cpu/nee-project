@@ -37,7 +37,8 @@ function Stop-Jarvis {
 }
 
 function New-LauncherFile {
-    $psCommand = "Set-Location '$SrcDir'; uv run python voice_jarvis.py --browser *>> '$LogFile'"
+    # -u = unbuffered, so [voice] messages & errors reach the log immediately.
+    $psCommand = "`$env:PYTHONUNBUFFERED='1'; Set-Location '$SrcDir'; uv run python -u voice_jarvis.py --browser *>> '$LogFile'"
     $vbs = @"
 ' Auto-generated: starts Jarvis voice mode hidden at logon.
 Set shell = CreateObject("WScript.Shell")
