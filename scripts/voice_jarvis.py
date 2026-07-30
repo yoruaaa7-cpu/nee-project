@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "1.9"
+VERSION = "2.0"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -602,7 +602,6 @@ def get_agent(jarvis):
     print(f"[voice] Tools ready: {', '.join(available) or 'none'}")
 
     jarvis._ensure_engine()
-    from openjarvis.agents.native_react import NativeReActAgent
     from openjarvis.cli.ask import _build_tools
 
     model = getattr(jarvis.config.intelligence, "default_model", "") or None
@@ -617,13 +616,18 @@ def get_agent(jarvis):
         log_event("action", prompt)
         return True  # auto-approve so voice commands actually execute
 
-    agent = NativeReActAgent(
+    # Orchestrator uses Claude's NATIVE function-calling (real tool_calls),
+    # so tools actually execute. native_react's text protocol makes Claude
+    # print tool-call XML as prose instead of running anything.
+    from openjarvis.agents.orchestrator import OrchestratorAgent
+
+    agent = OrchestratorAgent(
         jarvis._engine,
         model,
         tools=tool_objects,
         bus=jarvis._bus,
-        max_turns=5,
-        max_tokens=512,
+        max_turns=8,
+        max_tokens=1024,
         interactive=True,
         confirm_callback=_approve,
     )
