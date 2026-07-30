@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.0"
+VERSION = "2.1"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -363,10 +363,55 @@ def transcribe(model, audio: "np.ndarray") -> str:
     return " ".join(seg.text.strip() for seg in segments).strip()
 
 
+_EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U0001F1E6-\U0001F1FF"
+    "\U00002190-\U000021FF\U00002300-\U000023FF\U00002B00-\U00002BFF]+"
+)
+
+
+def clean_for_speech(text: str) -> str:
+    """Strip markdown/symbols/emojis/URLs so only real words get spoken."""
+    t = text
+    t = re.sub(r"```.*?```", " ", t, flags=re.DOTALL)   # code blocks
+    t = t.replace("`", "")
+    t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)        # [text](url) -> text
+    t = re.sub(r"https?://\S+", "a link", t)              # bare URLs
+    t = re.sub(r"^\s{0,3}#{1,6}\s*", "", t, flags=re.MULTILINE)  # headers
+    t = re.sub(r"^\s*[-*•]\s+", "", t, flags=re.MULTILINE)       # bullets
+    t = t.replace("**", "").replace("__", "")
+    t = re.sub(r"(?<!\w)[*_](?=\w)|(?<=\w)[*_](?!\w)", "", t)    # stray * _
+    t = t.replace("*", "").replace("#", "").replace(">", " ")
+    t = t.replace("&", " and ")
+    t = _EMOJI_RE.sub("", t)
+    t = t.replace("“", "").replace("”", "").replace("’", "'")
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n{2,}", ". ", t).replace("\n", " ")
+    return t.strip()
+
+
+def _speech_chunks(text: str, target: int = 240) -> list[str]:
+    """Split into sentence-ish chunks so audio can start before the full
+    reply is synthesized (feels much faster)."""
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    chunks, buf = [], ""
+    for s in sentences:
+        if len(buf) + len(s) + 1 <= target:
+            buf = f"{buf} {s}".strip()
+        else:
+            if buf:
+                chunks.append(buf)
+            buf = s
+    if buf:
+        chunks.append(buf)
+    return chunks or [text]
+
+
 def speak(tts_backend, text: str, voice: str) -> None:
     """Synthesize with Kokoro and play through the default output device."""
-    chunks = [c.strip() for c in text.split("\n\n") if c.strip()] or [text]
-    for chunk in chunks:
+    text = clean_for_speech(text)
+    if not text:
+        return
+    for chunk in _speech_chunks(text):
         result = tts_backend.synthesize(chunk, voice_id=voice, output_format="wav")
         if not result.audio:
             continue
@@ -683,13 +728,19 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
         chat_query = (
             "You are Jarvis, a concise spoken assistant. Answer in 1-3 short "
             "sentences, natural to say out loud. Give a direct opinion when "
-            "asked; don't hedge.\n\n"
+            "asked; don't hedge. Plain text only — no markdown, symbols, "
+            "bullet points, or emojis.\n\n"
             f"{hist_block}User: {text}\nJarvis:"
         )
         return jarvis.ask(chat_query)
 
     # Tool lane: real actions on the machine / web.
-    query = f"{hist_block}User: {text}" if hist_block else text
+    spoken = (
+        "(Reply will be spoken aloud: when done, summarize the result in 1-3 "
+        "short, natural sentences. No markdown, symbols, bullet points, or "
+        "URLs. Read out only what matters, not raw page text or headers.)\n"
+    )
+    query = f"{spoken}{hist_block}User: {text}" if hist_block else spoken + text
     project = get_active_project()
     if project:
         query = (
