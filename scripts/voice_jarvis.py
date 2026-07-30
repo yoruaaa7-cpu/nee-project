@@ -41,6 +41,14 @@ import webbrowser
 
 warnings.filterwarnings("ignore")
 
+# Bump this whenever the script changes so you can confirm your copy is current.
+VERSION = "1.8"
+
+# Answer --version without loading the heavy audio/ML deps.
+if __name__ == "__main__" and "--version" in sys.argv:
+    print(f"voice_jarvis {VERSION}")
+    raise SystemExit(0)
+
 MISSING_DEP_HINT = (
     "\n[voice] Missing dependency: {name}\n"
     "Install everything voice mode needs with:\n\n"
@@ -712,7 +720,8 @@ def main() -> None:
     except Exception as exc:
         brain = f"unavailable ({exc})"
     STATE["engine"] = brain
-    banner = f"BRAIN: {STATE['model']} via {brain}"
+    STATE["version"] = VERSION
+    banner = f"v{VERSION}  BRAIN: {STATE['model']} via {brain}"
     print("=" * 56)
     print(f"  {banner}")
     if brain == "cloud":

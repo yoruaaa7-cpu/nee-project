@@ -74,6 +74,7 @@
   <header>
     <div class="brand"><h1>JARVIS</h1><span>JUST A RATHER VERY INTELLIGENT SYSTEM</span></div>
     <div class="hstat">
+      <div><i>VER</i><b id="hver">—</b></div>
       <div><i>STATUS</i><b id="hstatus"><span class="dot"></span>BOOTING</b></div>
       <div><i>MODEL</i><b id="hmodel">—</b></div>
       <div><i>ENGINE</i><b id="hengine">—</b></div>
@@ -281,6 +282,7 @@ async function tick(){
     if(st!==statusName){ statusName=st; target=STYLE[st]||STYLE.standby; }
     $("hstatus").innerHTML='<span class="dot"></span>'+st.toUpperCase();
     $("statuslabel").textContent=(SUB[st]||st);
+    $("hver").textContent=s.version?("v"+s.version):"—";
     $("hmodel").textContent=s.model||"—";
     $("hengine").textContent=s.engine||"—";
     $("huptime").textContent=fmtUptime(s.uptime_s||0);
