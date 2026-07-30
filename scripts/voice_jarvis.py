@@ -67,7 +67,39 @@ COMMAND_MAX_SECONDS = 12.0    # hard cap per utterance
 SILENCE_STOP_SECONDS = 1.2    # stop after this much trailing silence
 SPEECH_WAIT_SECONDS = 6.0     # give up if nothing said after the ding
 
-EXIT_PHRASES = {"goodbye", "good bye", "quit", "exit"}
+EXIT_PHRASES = {
+    "goodbye", "good bye", "quit", "exit",
+    "power down", "power off", "terminate", "kill switch", "shut yourself down",
+}
+
+
+def start_stop_hotkey(combo_label: str = "Ctrl+Alt+J") -> None:
+    """Register a global hotkey (Ctrl+Alt+J) that stops Jarvis instantly.
+
+    Works even though the process runs hidden with no window. Windows only;
+    no extra packages needed (uses the Win32 API via ctypes).
+    """
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    MOD_ALT, MOD_CONTROL, VK_J, WM_HOTKEY = 0x0001, 0x0002, 0x4A, 0x0312
+
+    def loop() -> None:
+        user32 = ctypes.windll.user32
+        if not user32.RegisterHotKey(None, 1, MOD_ALT | MOD_CONTROL, VK_J):
+            return  # another instance already owns it
+        msg = wintypes.MSG()
+        while user32.GetMessageW(ctypes.byref(msg), None, 0, 0):
+            if msg.message == WM_HOTKEY:
+                print(f"\n[voice] {combo_label} pressed - shutting down.")
+                log_event("system", f"Stopped via hotkey ({combo_label})")
+                set_status("off")
+                os._exit(0)
+
+    threading.Thread(target=loop, daemon=True).start()
+    print(f"[voice] Stop hotkey armed: {combo_label}")
 
 _SLEEP_EXACT = {
     "shut down", "shutdown", "go to sleep", "sleep", "stand down",
@@ -597,6 +629,7 @@ def main() -> None:
 
     if args.dashboard_port:
         start_dashboard(args.dashboard_port)
+    start_stop_hotkey()
     STATE["voice"] = args.voice
     log_event("system", "Boot sequence started")
 
