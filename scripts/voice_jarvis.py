@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.4"
+VERSION = "2.5"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -143,21 +143,45 @@ def is_wake_command(text: str) -> bool:
     return any(h in norm for h in _WAKE_HINTS)
 
 
-# "any jarvis" activation: fires on any phrase containing "jarvis" (or a close
-# mis-transcription), so "listen up jarvis", "jarvis you there", etc. all work.
-_JARVIS_RE = re.compile(r"jar[vw]is+|jervis|jarvus|javis|jarviss?", re.IGNORECASE)
+# "any jarvis" activation: fires on any phrase containing something that
+# sounds like "jarvis" — Whisper often mis-hears it (travis, jervis, javis,
+# jar vis...), so we fuzzy-match each word instead of requiring exact spelling.
+import difflib
+
+_JARVIS_THRESHOLD = 0.66
+
+
+def _sounds_like_jarvis(word: str) -> bool:
+    w = word.lower().strip(".,!?'\"-:")
+    if "jarvis" in w:
+        return True
+    return difflib.SequenceMatcher(None, w, "jarvis").ratio() >= _JARVIS_THRESHOLD
+
+
+def _jarvis_word_end(text: str):
+    """Index just past the last jarvis-like word, or None if none found."""
+    last_end = None
+    words = list(re.finditer(r"\S+", text or ""))
+    for i, m in enumerate(words):
+        if _sounds_like_jarvis(m.group(0)):
+            last_end = m.end()
+        elif i + 1 < len(words):  # catch a split like "jar vis"
+            pair = (m.group(0) + words[i + 1].group(0)).lower()
+            if difflib.SequenceMatcher(None, pair, "jarvis").ratio() >= 0.7:
+                last_end = words[i + 1].end()
+    return last_end
 
 
 def has_jarvis(text: str) -> bool:
-    return bool(_JARVIS_RE.search(text or ""))
+    return _jarvis_word_end(text) is not None
 
 
 def command_after_jarvis(text: str) -> str:
     """Return whatever the user said after the last 'jarvis' (may be empty)."""
-    matches = list(_JARVIS_RE.finditer(text or ""))
-    if not matches:
+    end = _jarvis_word_end(text)
+    if end is None:
         return (text or "").strip()
-    return text[matches[-1].end():].strip(" ,.:-!?")
+    return text[end:].strip(" ,.:-!?")
 
 
 # ---------------------------------------------------------------------------
@@ -1240,6 +1264,7 @@ def main() -> None:
                     if after is None:
                         if not asleep:
                             print(f"[voice] (no wake word) {heard}")
+                            log_event("system", f"heard (no wake): {heard}")
                         continue
                 else:
                     if oww is not None:
