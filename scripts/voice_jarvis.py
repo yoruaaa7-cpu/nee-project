@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.1"
+VERSION = "2.2"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -79,6 +79,15 @@ EXIT_PHRASES = {
     "goodbye", "good bye", "quit", "exit",
     "power down", "power off", "terminate", "kill switch", "shut yourself down",
 }
+
+# Jarvis's personality — used in both the chat lane and tool-task summaries.
+PERSONA = (
+    "You are Jarvis, the user's loyal, witty personal AI — in the spirit of "
+    "Tony Stark's assistant. Address the user as 'sir'. Be warm, personable, "
+    "lightly dry-humored, and brief; converse naturally like a real companion, "
+    "not a corporate chatbot. When greeted or asked how you are, reply in "
+    "character (e.g. 'Doing well, sir — ready when you are')."
+)
 
 
 def start_stop_hotkey(combo_label: str = "Ctrl+Alt+J") -> None:
@@ -420,6 +429,42 @@ def speak(tts_backend, text: str, voice: str) -> None:
         sd.wait()
 
 
+def speak_interruptible(tts_backend, text: str, voice: str, stream, oww) -> bool:
+    """Speak, but keep listening for 'Hey Jarvis' so the user can cut in.
+
+    Returns True if the user interrupted (audio stopped early), else False.
+    The wake-word detector is robust to Jarvis's own voice (it only fires on
+    the phrase), so barge-in works without echo cancellation.
+    """
+    if oww is None:
+        speak(tts_backend, text, voice)
+        return False
+
+    text = clean_for_speech(text)
+    if not text:
+        return False
+
+    oww.reset()
+    for chunk in _speech_chunks(text):
+        result = tts_backend.synthesize(chunk, voice_id=voice, output_format="wav")
+        if not result.audio:
+            continue
+        data, sr = sf.read(io.BytesIO(result.audio), dtype="float32")
+        sd.play(data, sr)
+        while True:
+            try:
+                frame, _ = stream.read(FRAME_SAMPLES)
+                if _wake_score(oww.predict(frame[:, 0])) >= WAKE_THRESHOLD:
+                    sd.stop()
+                    return True
+            except Exception:
+                pass
+            out = sd.get_stream()
+            if out is None or not out.active:
+                break  # this chunk finished playing
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Main loop
 # ---------------------------------------------------------------------------
@@ -726,19 +771,19 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
     if not (use_tools and needs_tools(text)):
         print("[voice] Quick answer")
         chat_query = (
-            "You are Jarvis, a concise spoken assistant. Answer in 1-3 short "
-            "sentences, natural to say out loud. Give a direct opinion when "
-            "asked; don't hedge. Plain text only — no markdown, symbols, "
-            "bullet points, or emojis.\n\n"
+            PERSONA + " Answer in 1-3 short sentences, natural to say out loud. "
+            "Give a direct opinion when asked; don't hedge. Plain text only — "
+            "no markdown, symbols, bullet points, or emojis.\n\n"
             f"{hist_block}User: {text}\nJarvis:"
         )
         return jarvis.ask(chat_query)
 
     # Tool lane: real actions on the machine / web.
     spoken = (
-        "(Reply will be spoken aloud: when done, summarize the result in 1-3 "
-        "short, natural sentences. No markdown, symbols, bullet points, or "
-        "URLs. Read out only what matters, not raw page text or headers.)\n"
+        PERSONA + " (Reply will be spoken aloud: when done, summarize the "
+        "result in 1-3 short, natural sentences, addressing the user as sir. "
+        "No markdown, symbols, bullet points, or URLs. Read out only what "
+        "matters, not raw page text or headers.)\n"
     )
     query = f"{spoken}{hist_block}User: {text}" if hist_block else spoken + text
     project = get_active_project()
@@ -930,8 +975,11 @@ def main() -> None:
             speech_threshold = calibrate_ambient(stream)
 
             asleep = False
+            pending_listen = False  # set after a barge-in: skip the wake word
             while True:
-                wait_for_wake(stream, oww)
+                if not pending_listen:
+                    wait_for_wake(stream, oww)
+                pending_listen = False
 
                 if asleep:
                     # No ding while dormant - just quietly check for a wake-up.
@@ -996,12 +1044,19 @@ def main() -> None:
                 STATE["last_reply"] = reply
                 log_event("jarvis", reply)
 
-                # Pause the mic while Jarvis speaks so it doesn't hear itself.
-                stream.stop()
+                # Speak, but stay listening so the user can cut in with
+                # "Hey Jarvis". Mic stays open (wake word ignores our own voice).
                 set_status("speaking")
+                interrupted = False
                 if tts:
-                    speak(tts, reply, args.voice)
-                stream.start()
+                    interrupted = speak_interruptible(
+                        tts, reply, args.voice, stream, oww
+                    )
+                if interrupted:
+                    print("[voice] Interrupted — go ahead, sir.")
+                    log_event("system", "Interrupted by user")
+                    pending_listen = True  # skip wake word, listen immediately
+                    continue
                 set_status("standby")
                 print("[voice] Listening for 'Hey Jarvis'...")
         else:
