@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.2"
+VERSION = "2.3"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -661,6 +661,174 @@ def browser_login() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Desktop control — open apps, type, shortcuts, screenshots (work alongside you)
+# ---------------------------------------------------------------------------
+
+DESKTOP_ENABLED = False
+
+
+def build_desktop_tools() -> list:
+    """Create desktop-control tools (pyautogui). Defined lazily so OpenJarvis
+    and pyautogui are only imported when desktop mode is actually on."""
+    from openjarvis.core.types import ToolResult
+    from openjarvis.tools._stubs import BaseTool, ToolSpec
+
+    def _pg():
+        import pyautogui
+
+        pyautogui.FAILSAFE = False
+        return pyautogui
+
+    class _Tool(BaseTool):
+        is_local = True
+
+    class DesktopOpen(_Tool):
+        tool_id = "desktop_open"
+
+        @property
+        def spec(self):
+            return ToolSpec(
+                name="desktop_open",
+                description=(
+                    "Open an app, file, folder, or URL on the desktop and bring "
+                    "it to the foreground. Examples: 'code' (VS Code), "
+                    "'code C:/Users/me/project' (open a folder in VS Code), "
+                    "'notepad', a file path, or 'https://...'."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {"target": {"type": "string"}},
+                    "required": ["target"],
+                },
+                category="desktop",
+            )
+
+        def execute(self, **p):
+            try:
+                subprocess.Popen(f'start "" {p.get("target","")}', shell=True)
+                return ToolResult(
+                    tool_name="desktop_open",
+                    content=f"Opened {p.get('target','')}.",
+                    success=True,
+                )
+            except Exception as exc:
+                return ToolResult(
+                    tool_name="desktop_open", content=f"error: {exc}", success=False
+                )
+
+    class DesktopType(_Tool):
+        tool_id = "desktop_type"
+
+        @property
+        def spec(self):
+            return ToolSpec(
+                name="desktop_type",
+                description=(
+                    "Type text into whatever window is currently focused (an "
+                    "editor, document, terminal, search box). Focus/open the "
+                    "target first."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                },
+                category="desktop",
+            )
+
+        def execute(self, **p):
+            try:
+                _pg().write(p.get("text", ""), interval=0.01)
+                return ToolResult(
+                    tool_name="desktop_type", content="Typed.", success=True
+                )
+            except Exception as exc:
+                return ToolResult(
+                    tool_name="desktop_type", content=f"error: {exc}", success=False
+                )
+
+    class DesktopHotkey(_Tool):
+        tool_id = "desktop_hotkey"
+
+        @property
+        def spec(self):
+            return ToolSpec(
+                name="desktop_hotkey",
+                description=(
+                    "Press a keyboard shortcut, keys joined by '+'. Examples: "
+                    "'ctrl+s' (save), 'ctrl+enter', 'alt+tab', 'enter', "
+                    "'ctrl+shift+p' (VS Code command palette), 'ctrl+`' "
+                    "(VS Code terminal)."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {"keys": {"type": "string"}},
+                    "required": ["keys"],
+                },
+                category="desktop",
+            )
+
+        def execute(self, **p):
+            try:
+                keys = [
+                    k.strip()
+                    for k in p.get("keys", "").replace(" ", "").split("+")
+                    if k.strip()
+                ]
+                _pg().hotkey(*keys)
+                return ToolResult(
+                    tool_name="desktop_hotkey",
+                    content=f"Pressed {'+'.join(keys)}.",
+                    success=True,
+                )
+            except Exception as exc:
+                return ToolResult(
+                    tool_name="desktop_hotkey", content=f"error: {exc}", success=False
+                )
+
+    class DesktopScreenshot(_Tool):
+        tool_id = "desktop_screenshot"
+
+        @property
+        def spec(self):
+            return ToolSpec(
+                name="desktop_screenshot",
+                description=(
+                    "Capture the current screen to a PNG file (to record what's "
+                    "visible). Returns the saved path."
+                ),
+                parameters={
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+                category="desktop",
+            )
+
+        def execute(self, **p):
+            try:
+                path = p.get("path") or str(
+                    pathlib.Path(os.environ.get("LOCALAPPDATA", "."))
+                    / "OpenJarvis"
+                    / "screen.png"
+                )
+                _pg().screenshot(path)
+                return ToolResult(
+                    tool_name="desktop_screenshot",
+                    content=f"Saved screenshot to {path}",
+                    success=True,
+                    metadata={"path": path},
+                )
+            except Exception as exc:
+                return ToolResult(
+                    tool_name="desktop_screenshot",
+                    content=f"error: {exc}",
+                    success=False,
+                )
+
+    return [DesktopOpen(), DesktopType(), DesktopHotkey(), DesktopScreenshot()]
+
+
+# ---------------------------------------------------------------------------
 # The acting agent (built once, reused every turn)
 # ---------------------------------------------------------------------------
 
@@ -685,11 +853,23 @@ def get_agent(jarvis):
             if bt not in tool_names:
                 tool_names.append(bt)
 
+    if DESKTOP_ENABLED and "file_write" not in tool_names:
+        tool_names.append("file_write")  # needed to create/edit code files
+
     import openjarvis.tools  # noqa: F401
     from openjarvis.core.registry import ToolRegistry
 
     available = [n for n in tool_names if ToolRegistry.contains(n)]
-    print(f"[voice] Tools ready: {', '.join(available) or 'none'}")
+
+    extra_desktop = []
+    if DESKTOP_ENABLED:
+        try:
+            extra_desktop = build_desktop_tools()
+        except Exception as exc:
+            print(f"[voice] Desktop tools unavailable: {exc}")
+
+    shown = available + [t.spec.name for t in extra_desktop]
+    print(f"[voice] Tools ready: {', '.join(shown) or 'none'}")
 
     jarvis._ensure_engine()
     from openjarvis.cli.ask import _build_tools
@@ -700,6 +880,7 @@ def get_agent(jarvis):
         model = models[0] if models else "default"
 
     tool_objects = _build_tools(available, jarvis.config, jarvis._engine, model)
+    tool_objects += extra_desktop
 
     def _approve(prompt: str) -> bool:
         print(f"  [action] {prompt}")
@@ -745,6 +926,8 @@ _TOOL_REFS = (
     "on my screen", "screenshot", "the web", "online",
     "website", "web site", ".com", ".org", "log in", "sign in", "checkout",
     "add to cart", "calendar", "book ", "order ", "fill out", "on the site",
+    "vs code", "vscode", "code editor", "program", "script", "function",
+    "type out", "type this", "write a", "fix the", "debug", "the terminal",
 )
 
 
@@ -786,11 +969,21 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
         "matters, not raw page text or headers.)\n"
     )
     query = f"{spoken}{hist_block}User: {text}" if hist_block else spoken + text
+    if DESKTOP_ENABLED:
+        query = (
+            "(You can work on the desktop alongside the user, visibly. To code: "
+            "open the folder in VS Code with desktop_open 'code <project path>', "
+            "create/edit files with file_write (they appear live in the editor), "
+            "and run programs with shell_exec. You can also type into the focused "
+            "window with desktop_type and press shortcuts with desktop_hotkey. "
+            "Do the work rather than just describing it.)\n" + query
+        )
     project = get_active_project()
     if project:
         query = (
-            f'(Active project folder: {project} — run shell commands inside '
-            f'it, e.g. cd /d "{project}" && <command>)\n' + query
+            f'(Active project folder: {project} — open/work in it, e.g. '
+            f'desktop_open "code {project}" and run commands with '
+            f'cd /d "{project}" && <command>)\n' + query
         )
     try:
         agent = get_agent(jarvis)
@@ -847,6 +1040,11 @@ def main() -> None:
         help="Run browser automation invisibly (default is a visible window)",
     )
     parser.add_argument(
+        "--desktop",
+        action="store_true",
+        help="Enable desktop control (open apps, type, shortcuts, screenshots)",
+    )
+    parser.add_argument(
         "--project",
         default="",
         help="Set the active project folder Jarvis runs commands in",
@@ -868,7 +1066,7 @@ def main() -> None:
         browser_login()
         return
 
-    global BROWSER_ENABLED
+    global BROWSER_ENABLED, DESKTOP_ENABLED
     if args.browser:
         BROWSER_ENABLED = True
         try:
@@ -877,6 +1075,16 @@ def main() -> None:
         except Exception as exc:
             print(f"[voice] Browser control unavailable: {exc}")
             BROWSER_ENABLED = False
+
+    if args.desktop:
+        try:
+            import pyautogui  # noqa: F401
+
+            DESKTOP_ENABLED = True
+            print("[voice] Desktop control ON (open apps, type, shortcuts).")
+        except Exception as exc:
+            print(f"[voice] Desktop control unavailable ({exc}).")
+            print("        Install it with:  uv pip install pyautogui")
 
     if args.project:
         ACTIVE_PROJECT_FILE.parent.mkdir(parents=True, exist_ok=True)
