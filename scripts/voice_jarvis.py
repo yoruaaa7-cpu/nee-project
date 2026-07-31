@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.3"
+VERSION = "2.4"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -141,6 +141,23 @@ def is_sleep_command(text: str) -> bool:
 def is_wake_command(text: str) -> bool:
     norm = _norm_phrase(text)
     return any(h in norm for h in _WAKE_HINTS)
+
+
+# "any jarvis" activation: fires on any phrase containing "jarvis" (or a close
+# mis-transcription), so "listen up jarvis", "jarvis you there", etc. all work.
+_JARVIS_RE = re.compile(r"jar[vw]is+|jervis|jarvus|javis|jarviss?", re.IGNORECASE)
+
+
+def has_jarvis(text: str) -> bool:
+    return bool(_JARVIS_RE.search(text or ""))
+
+
+def command_after_jarvis(text: str) -> str:
+    """Return whatever the user said after the last 'jarvis' (may be empty)."""
+    matches = list(_JARVIS_RE.finditer(text or ""))
+    if not matches:
+        return (text or "").strip()
+    return text[matches[-1].end():].strip(" ,.:-!?")
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +381,21 @@ def record_command(stream, speech_threshold: float) -> "np.ndarray":
 # ---------------------------------------------------------------------------
 # Speech-to-text / text-to-speech
 # ---------------------------------------------------------------------------
+
+def listen_for_jarvis(stream, stt, threshold):
+    """Capture one spoken utterance and, if it mentions 'jarvis', return
+    (command_after, full_text). Returns (None, full_text) if speech had no
+    wake word, or (None, None) on a silent timeout."""
+    audio = record_command(stream, threshold)
+    if audio.size == 0:
+        return None, None
+    text = transcribe(stt, audio)
+    if not text:
+        return None, None
+    if not has_jarvis(text):
+        return None, text
+    return command_after_jarvis(text), text
+
 
 def transcribe(model, audio: "np.ndarray") -> str:
     if audio.size < SAMPLE_RATE // 4:  # under ~0.25s: nothing usable
@@ -1019,6 +1051,12 @@ def main() -> None:
         help="Use Enter-to-record instead of the 'Hey Jarvis' wake word",
     )
     parser.add_argument(
+        "--wake-strict",
+        action="store_true",
+        help="Only wake on the exact 'Hey Jarvis' phrase (default: any phrase "
+        "containing 'jarvis')",
+    )
+    parser.add_argument(
         "--dashboard-port",
         type=int,
         default=8765,
@@ -1159,11 +1197,18 @@ def main() -> None:
     set_status("standby")
     log_event("system", "All systems online — awaiting command")
 
+    wake_any = not args.wake_strict
+
     print()
     print("=" * 56)
-    if oww is not None:
+    if not args.push_to_talk:
         print("  Jarvis is listening.")
-        print("  Say 'HEY JARVIS', wait for the ding, then speak.")
+        if wake_any:
+            print("  Say anything with 'Jarvis' in it — 'Jarvis, ...',")
+            print("  'listen up Jarvis', 'wake up Jarvis'. Say the command in")
+            print("  the same breath and he'll just do it.")
+        else:
+            print("  Say 'HEY JARVIS', wait for the ding, then speak.")
         print("  Say 'goodbye' to quit, or press Ctrl+C.")
     else:
         print("  Jarvis voice mode ready (push-to-talk).")
@@ -1172,7 +1217,7 @@ def main() -> None:
     print("=" * 56)
 
     try:
-        if oww is not None:
+        if not args.push_to_talk:
             stream = sd.InputStream(
                 samplerate=SAMPLE_RATE,
                 channels=1,
@@ -1185,15 +1230,24 @@ def main() -> None:
             asleep = False
             pending_listen = False  # set after a barge-in: skip the wake word
             while True:
-                if not pending_listen:
-                    wait_for_wake(stream, oww)
-                pending_listen = False
+                after, heard = "", ""
+                if pending_listen:
+                    pending_listen = False  # barge-in -> record a command below
+                elif wake_any:
+                    after, heard = listen_for_jarvis(stream, stt, speech_threshold)
+                    if heard is None:
+                        continue  # silence, keep listening
+                    if after is None:
+                        if not asleep:
+                            print(f"[voice] (no wake word) {heard}")
+                        continue
+                else:
+                    if oww is not None:
+                        wait_for_wake(stream, oww)
 
+                # While asleep, only a wake-up phrase resumes.
                 if asleep:
-                    # No ding while dormant - just quietly check for a wake-up.
-                    audio = record_command(stream, speech_threshold)
-                    text = transcribe(stt, audio)
-                    if text and is_wake_command(text):
+                    if is_wake_command(heard) or is_wake_command(after):
                         asleep = False
                         set_status("standby")
                         log_event("system", "Resumed from sleep")
@@ -1202,19 +1256,22 @@ def main() -> None:
                         if tts:
                             speak(tts, "At your service.", args.voice)
                         stream.start()
-                        print("[voice] Listening for 'Hey Jarvis'...")
                     else:
-                        print(f"[voice] (asleep) ignored: {text or '...'}")
+                        print(f"[voice] (asleep) ignored: {heard or '...'}")
                     continue
 
-                set_status("listening")
-                _ding()
-                print("\n[voice] Yes? (listening...)")
-                audio = record_command(stream, speech_threshold)
-
-                text = transcribe(stt, audio)
+                # If they packed the command into the wake phrase, use it;
+                # otherwise ding and listen for the command.
+                if after:
+                    text = after
+                else:
+                    set_status("listening")
+                    _ding()
+                    print("\n[voice] Yes? (listening...)")
+                    audio = record_command(stream, speech_threshold)
+                    text = transcribe(stt, audio)
                 if not text:
-                    print("[voice] Didn't catch anything - say 'Hey Jarvis' and try again.")
+                    print("[voice] Didn't catch that - try again.")
                     set_status("standby")
                     continue
                 print(f"You said: {text}")
@@ -1232,12 +1289,12 @@ def main() -> None:
                     asleep = True
                     set_status("asleep")
                     log_event("system", "Entering sleep mode")
-                    print("[voice] Going to sleep. Say 'Hey Jarvis, wake up' to resume.")
+                    print("[voice] Going to sleep. Say 'Jarvis, wake up' to resume.")
                     stream.stop()
                     if tts:
                         speak(
                             tts,
-                            "Going to sleep. Say, Hey Jarvis, wake up, when you need me.",
+                            "Going to sleep. Say, Jarvis wake up, when you need me.",
                             args.voice,
                         )
                     stream.start()
@@ -1252,8 +1309,8 @@ def main() -> None:
                 STATE["last_reply"] = reply
                 log_event("jarvis", reply)
 
-                # Speak, but stay listening so the user can cut in with
-                # "Hey Jarvis". Mic stays open (wake word ignores our own voice).
+                # Speak, but stay listening so the user can cut in by saying
+                # "Hey Jarvis" (barge-in uses the wake-word model if available).
                 set_status("speaking")
                 interrupted = False
                 if tts:
@@ -1263,10 +1320,10 @@ def main() -> None:
                 if interrupted:
                     print("[voice] Interrupted — go ahead, sir.")
                     log_event("system", "Interrupted by user")
-                    pending_listen = True  # skip wake word, listen immediately
+                    pending_listen = True  # skip wake, listen immediately
                     continue
                 set_status("standby")
-                print("[voice] Listening for 'Hey Jarvis'...")
+                print("[voice] Listening...")
         else:
             while True:
                 input("\n[voice] Press Enter to talk...")
