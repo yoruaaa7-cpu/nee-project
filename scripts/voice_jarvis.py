@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.5"
+VERSION = "2.6"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -1027,12 +1027,16 @@ def ask_jarvis(jarvis, history: list, text: str, use_tools: bool) -> str:
     query = f"{spoken}{hist_block}User: {text}" if hist_block else spoken + text
     if DESKTOP_ENABLED:
         query = (
-            "(You can work on the desktop alongside the user, visibly. To code: "
-            "open the folder in VS Code with desktop_open 'code <project path>', "
-            "create/edit files with file_write (they appear live in the editor), "
-            "and run programs with shell_exec. You can also type into the focused "
-            "window with desktop_type and press shortcuts with desktop_hotkey. "
-            "Do the work rather than just describing it.)\n" + query
+            "(IMPORTANT: the user wants to SEE you work on the visible desktop — "
+            "never just run things silently in the shell. For any coding task "
+            "you MUST, in this order: (1) create/edit the file with file_write; "
+            "(2) OPEN IT VISIBLY in VS Code by calling desktop_open with target "
+            "'code \"<full path to the file>\"' so a VS Code window actually "
+            "appears on screen; (3) run it with shell_exec and report the "
+            "result out loud. Opening VS Code is required, not optional. You can "
+            "also type into the focused window with desktop_type and press "
+            "shortcuts with desktop_hotkey. Do the work, don't just describe "
+            "it.)\n" + query
         )
     project = get_active_project()
     if project:
