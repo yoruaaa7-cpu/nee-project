@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.6"
+VERSION = "2.7"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -367,8 +367,15 @@ def wait_for_wake(stream, oww) -> None:
             return
 
 
-def record_command(stream, speech_threshold: float) -> "np.ndarray":
-    """After the wake word: record until the speaker goes quiet."""
+def record_command(
+    stream,
+    speech_threshold: float,
+    max_seconds: float = COMMAND_MAX_SECONDS,
+    silence_stop: float = SILENCE_STOP_SECONDS,
+    speech_wait: float = SPEECH_WAIT_SECONDS,
+) -> "np.ndarray":
+    """Record until the speaker goes quiet. Longer max_seconds / silence_stop
+    suit interview answers (more thinking time, longer responses)."""
     frames: list[np.ndarray] = []
     started = False
     silent_for = 0.0
@@ -376,7 +383,7 @@ def record_command(stream, speech_threshold: float) -> "np.ndarray":
     frame_seconds = FRAME_SAMPLES / SAMPLE_RATE
     total = 0.0
 
-    while total < COMMAND_MAX_SECONDS:
+    while total < max_seconds:
         frame, _ = stream.read(FRAME_SAMPLES)
         mono = frame[:, 0]
         level = _rms(mono)
@@ -387,14 +394,14 @@ def record_command(stream, speech_threshold: float) -> "np.ndarray":
             if level >= speech_threshold:
                 started = True
                 frames.append(mono.copy())
-            elif waited >= SPEECH_WAIT_SECONDS:
+            elif waited >= speech_wait:
                 return np.zeros(0, dtype="float32")
             continue
 
         frames.append(mono.copy())
         if level < speech_threshold:
             silent_for += frame_seconds
-            if silent_for >= SILENCE_STOP_SECONDS:
+            if silent_for >= silence_stop:
                 break
         else:
             silent_for = 0.0
@@ -1313,6 +1320,45 @@ def main() -> None:
                     if tts:
                         speak(tts, "Goodbye.", args.voice)
                     break
+
+                if re.search(
+                    r"\binterview me\b|\b(start|begin|run|do)\b.*\binterview\b"
+                    r"|\bmock interview\b|\binterview mode\b",
+                    text.lower(),
+                ):
+                    try:
+                        from jarvis_interview import InterviewCtx, run_interview
+
+                        def _listen(max_seconds=75, silence=2.4):
+                            audio = record_command(
+                                stream, speech_threshold,
+                                max_seconds=max_seconds, silence_stop=silence,
+                                speech_wait=8.0,
+                            )
+                            return transcribe(stt, audio)
+
+                        def _speak(t):
+                            if tts:
+                                speak(tts, t, args.voice)
+
+                        ctx = InterviewCtx(
+                            speak=_speak,
+                            listen=_listen,
+                            ask=lambda p: jarvis.ask(p),
+                            log=log_event,
+                            set_status=set_status,
+                            voice=args.voice,
+                            short="short" in text.lower(),
+                        )
+                        run_interview(ctx)
+                    except Exception as exc:
+                        print(f"[voice] Interview error: {exc}")
+                        if tts:
+                            speak(tts, "Sorry sir, the interview hit a snag.",
+                                  args.voice)
+                    set_status("standby")
+                    print("[voice] Listening...")
+                    continue
 
                 if is_sleep_command(text):
                     asleep = True
