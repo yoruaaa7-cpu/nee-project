@@ -6,67 +6,90 @@
 <title>JARVIS</title>
 <style>
   :root{
-    --cyan:#37d0e6; --cyan-dim:#1b6d7a; --cyan-faint:rgba(55,208,230,.15);
-    --bg:#03070d; --panel:rgba(10,22,32,.42); --line:rgba(55,208,230,.26);
-    --text:#bfeaf2; --muted:#4d7f8c; --warn:#e6a437; --ok:#37e69a;
+    --accent:#37d0e6; --accent2:#1b6d7a;
+    --bg:#03070d; --panel:rgba(10,22,32,.42); --line:rgba(55,208,230,.24);
+    --text:#cdeef4; --muted:#5a8894; --warn:#e6a437; --ok:#37e69a;
+    --glow:rgba(55,208,230,.5);
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
     font-family:"Consolas","SF Mono",ui-monospace,monospace;overflow:hidden}
-  body{background:radial-gradient(1400px 900px at 50% 52%,rgba(55,208,230,.06),transparent 72%),var(--bg)}
+  body{background:
+    radial-gradient(1400px 900px at 50% 50%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%),
+    var(--bg)}
+  /* faint HUD scanlines */
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;z-index:50;
+    background:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,0,0,.10) 3px 4px);
+    mix-blend-mode:overlay;opacity:.5}
+
   .grid{display:grid;height:100vh;padding:16px;gap:14px;
-    grid-template-columns:330px 1fr 330px;grid-template-rows:60px 1fr 1fr;
-    transition:opacity .4s}
+    grid-template-columns:320px 1fr 320px;grid-template-rows:58px 1fr 1fr;
+    transition:opacity .3s}
   header{grid-column:1/4;display:flex;align-items:center;justify-content:space-between;
     border-bottom:1px solid var(--line);padding-bottom:8px}
-  .brand{display:flex;align-items:baseline;gap:16px}
-  .brand h1{margin:0;font-size:24px;letter-spacing:8px;color:var(--cyan);
-    text-shadow:0 0 18px rgba(55,208,230,.5)}
+  .brand{display:flex;align-items:baseline;gap:14px}
+  .brand h1{margin:0;font-size:23px;letter-spacing:8px;color:var(--accent);
+    text-shadow:0 0 18px var(--glow)}
   .brand span{color:var(--muted);letter-spacing:3px;font-size:10px}
-  .hstat{display:flex;gap:28px;align-items:center;font-size:10px;letter-spacing:2px}
-  .hstat b{display:block;color:#fff;font-size:14px;letter-spacing:1px;margin-top:3px}
+  .hstat{display:flex;gap:22px;align-items:center;font-size:10px;letter-spacing:2px}
+  .hstat b{display:block;color:#fff;font-size:13px;letter-spacing:1px;margin-top:3px}
   .hstat i{color:var(--muted);font-style:normal}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;
     background:var(--ok);box-shadow:0 0 10px var(--ok);margin-right:6px;animation:pulse 2s infinite}
   @keyframes pulse{50%{opacity:.35}}
-  .ctrls{display:flex;gap:8px;margin-left:12px}
-  .ctrls button{background:transparent;border:1px solid var(--line);color:var(--cyan);
-    width:34px;height:34px;font-size:15px;cursor:pointer;border-radius:4px}
-  .ctrls button:hover{background:var(--cyan-faint)}
-  .panel{position:relative;background:var(--panel);border:1px solid var(--line);
-    padding:16px;overflow:hidden;
-    clip-path:polygon(0 0,calc(100% - 16px) 0,100% 16px,100% 100%,16px 100%,0 calc(100% - 16px))}
+  .ctrls{display:flex;gap:6px;align-items:center;margin-left:6px}
+  .swatch{width:16px;height:16px;border-radius:50%;border:1px solid rgba(255,255,255,.25);
+    cursor:pointer;padding:0}
+  .swatch.on{outline:2px solid #fff;outline-offset:1px}
+  .ctrls button.ico{background:transparent;border:1px solid var(--line);color:var(--accent);
+    width:30px;height:30px;font-size:14px;cursor:pointer;border-radius:4px}
+  .ctrls button.ico:hover{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+
+  .panel{position:relative;background:var(--panel);border:1px solid var(--line);padding:15px;
+    overflow:hidden;
+    clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px))}
+  .panel::before{content:"";position:absolute;top:0;left:0;width:22px;height:1px;background:var(--accent)}
   .ptitle{display:flex;justify-content:space-between;font-size:10px;letter-spacing:3px;
-    color:var(--muted);border-bottom:1px solid var(--cyan-faint);padding-bottom:8px;margin-bottom:14px}
-  .ptitle b{color:var(--cyan)}
-  .col-left,.col-right{display:flex;flex-direction:column;gap:14px;grid-row:2/4}
-  .center{grid-column:2;grid-row:2/4;position:relative}
-  #core{position:absolute;inset:0;width:100%;height:100%;display:block}
+    color:var(--muted);border-bottom:1px solid color-mix(in srgb,var(--accent) 15%,transparent);
+    padding-bottom:7px;margin-bottom:12px}
+  .ptitle b{color:var(--accent)}
+  .col{display:flex;flex-direction:column;gap:14px;grid-row:2/4;min-height:0}
+  .center{grid-column:2;grid-row:2/4;position:relative;display:flex;
+    flex-direction:column;align-items:center;justify-content:center}
 
-  .meter{margin:13px 0}
-  .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:2px;color:var(--muted);margin-bottom:6px}
+  .meter{margin:10px 0}
+  .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:var(--muted);margin-bottom:5px}
   .meter label b{color:#fff}
-  .bar{height:6px;background:rgba(55,208,230,.1);position:relative;overflow:hidden}
-  .bar>i{position:absolute;left:0;top:0;bottom:0;background:var(--cyan);box-shadow:0 0 12px var(--cyan);transition:width .5s}
+  .spark{width:100%;height:34px;display:block}
 
-  .log{font-size:11px;line-height:1.85;height:100%;overflow:hidden;display:flex;flex-direction:column-reverse}
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .stat{border:1px solid color-mix(in srgb,var(--accent) 14%,transparent);padding:8px 10px}
+  .stat .v{font-size:20px;color:#fff}
+  .stat .k{font-size:9px;letter-spacing:2px;color:var(--muted);margin-top:2px}
+
+  .tabs{display:flex;gap:4px;margin-bottom:8px}
+  .tabs button{flex:1;background:transparent;border:1px solid var(--line);color:var(--muted);
+    font-size:9px;letter-spacing:1px;padding:4px 0;cursor:pointer}
+  .tabs button.on{color:var(--accent);border-color:var(--accent);
+    background:color-mix(in srgb,var(--accent) 10%,transparent)}
+  .log{font-size:11px;line-height:1.8;flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column-reverse}
   .log .row{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .log .t{color:var(--cyan-dim)}
-  .log .user{color:#fff}.log .jarvis{color:var(--cyan)}
+  .log .t{color:var(--accent2)}
+  .log .user{color:#fff}.log .jarvis{color:var(--accent)}
   .log .action{color:var(--warn)}.log .system{color:var(--muted)}
+  .grow{flex:1;min-height:0;display:flex;flex-direction:column}
   .convo b{color:var(--muted);font-size:10px;letter-spacing:2px;display:block;margin-bottom:4px}
-  .convo p{margin:0 0 14px;font-size:13px;line-height:1.5}
-  .convo .cmd{color:#fff}.convo .rep{color:var(--cyan)}
-  .grow{flex:1;min-height:0}
+  .convo p{margin:0 0 12px;font-size:13px;line-height:1.5}
+  .convo .cmd{color:#fff}.convo .rep{color:var(--accent)}
 
-  /* focus mode: only the living core */
+  svg .stroke{stroke:var(--accent)}
+  .statusword{margin-top:14px;font-size:20px;letter-spacing:8px;color:var(--accent);
+    text-shadow:0 0 16px var(--glow);text-transform:uppercase}
+  .subword{margin-top:6px;color:var(--muted);font-size:11px;letter-spacing:3px}
+
   body.focus .grid{grid-template-columns:0 1fr 0}
-  body.focus .col-left,body.focus .col-right,body.focus header{display:none}
+  body.focus .col,body.focus header{display:none}
   body.focus .center{grid-column:1/4}
-  .statuslabel{position:absolute;left:50%;bottom:26px;transform:translateX(-50%);
-    font-size:12px;letter-spacing:6px;color:var(--muted);text-transform:uppercase;
-    opacity:0;transition:opacity .3s;pointer-events:none}
-  body.focus .statuslabel{opacity:.7}
 </style>
 </head>
 <body>
@@ -77,40 +100,106 @@
       <div><i>VER</i><b id="hver">—</b></div>
       <div><i>STATUS</i><b id="hstatus"><span class="dot"></span>BOOTING</b></div>
       <div><i>MODEL</i><b id="hmodel">—</b></div>
-      <div><i>ENGINE</i><b id="hengine">—</b></div>
       <div><i>UPTIME</i><b id="huptime">0s</b></div>
       <div><i>TIME</i><b id="hclock">--:--:--</b></div>
+      <div class="ctrls" id="swatches"></div>
       <div class="ctrls">
-        <button id="focusBtn" title="Focus mode (F)">◎</button>
-        <button id="fsBtn" title="Fullscreen (F11)">⛶</button>
+        <button class="ico" id="focusBtn" title="Focus (F)">◎</button>
+        <button class="ico" id="fsBtn" title="Fullscreen">⛶</button>
       </div>
     </div>
   </header>
 
-  <div class="col-left">
+  <div class="col">
     <div class="panel" style="flex:0 0 auto">
       <div class="ptitle"><span>SYSTEM //</span><b>RESOURCES</b></div>
-      <div class="meter"><label>CPU LOAD <b id="cpu">--%</b></label><div class="bar"><i id="cpubar" style="width:0"></i></div></div>
-      <div class="meter"><label>MEMORY <b id="mem">-- GB</b></label><div class="bar"><i id="membar" style="width:0"></i></div></div>
-      <div class="meter"><label>STORAGE <b id="disk">--%</b></label><div class="bar"><i id="diskbar" style="width:0"></i></div></div>
+      <div class="meter"><label>CPU <b id="cpu">--%</b></label><canvas class="spark" id="cpuSpark"></canvas></div>
+      <div class="meter"><label>MEMORY <b id="mem">-- GB</b></label><canvas class="spark" id="memSpark"></canvas></div>
+      <div class="meter" style="margin-bottom:0"><label>STORAGE <b id="disk">--%</b></label>
+        <div style="height:6px;background:color-mix(in srgb,var(--accent) 10%,transparent);position:relative;overflow:hidden">
+          <i id="diskbar" style="position:absolute;inset:0 100% 0 0;background:var(--accent);box-shadow:0 0 12px var(--accent);transition:right .5s"></i></div>
+      </div>
+    </div>
+    <div class="panel" style="flex:0 0 auto">
+      <div class="ptitle"><span>SYSTEM //</span><b>SESSION</b></div>
+      <div class="stats">
+        <div class="stat"><div class="v" id="stCmds">0</div><div class="k">COMMANDS</div></div>
+        <div class="stat"><div class="v" id="stActs">0</div><div class="k">ACTIONS</div></div>
+        <div class="stat"><div class="v" id="stTime">0m</div><div class="k">SESSION</div></div>
+        <div class="stat"><div class="v" id="stPeak">--</div><div class="k">PEAK MEM</div></div>
+      </div>
     </div>
     <div class="panel grow">
-      <div class="ptitle"><span>SYSTEM //</span><b>ACTIVE PROJECT</b></div>
-      <p id="project" style="font-size:12px;color:var(--cyan);word-break:break-all">none set</p>
-      <div class="ptitle" style="margin-top:18px"><span>SYSTEM //</span><b>VOICE</b></div>
-      <p style="font-size:12px;color:var(--muted)">Wake word: <span style="color:#fff">"Hey Jarvis"</span><br>
-        Voice: <span id="voice" style="color:#fff">—</span></p>
+      <div class="ptitle"><span>SYSTEM //</span><b>CONTEXT</b></div>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 4px">ENGINE</p>
+      <p style="font-size:12px;color:var(--accent);margin:0 0 12px" id="engine">—</p>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 4px">ACTIVE PROJECT</p>
+      <p style="font-size:12px;color:var(--accent);word-break:break-all;margin:0 0 12px" id="project">none set</p>
+      <p style="font-size:11px;color:var(--muted);margin:0 0 4px">VOICE</p>
+      <p style="font-size:12px;color:#fff;margin:0">Wake: "Jarvis" · <span id="voice">—</span></p>
     </div>
   </div>
 
   <div class="center">
-    <canvas id="core"></canvas>
-    <div class="statuslabel" id="statuslabel">standby</div>
+    <svg id="head" viewBox="0 0 320 340" width="min(52vh,560px)" style="max-width:100%">
+      <defs>
+        <clipPath id="cranium"><ellipse cx="178" cy="132" rx="104" ry="98"/></clipPath>
+        <radialGradient id="brainGlow" cx="50%" cy="45%" r="60%">
+          <stop offset="0%"  stop-color="var(--accent)" stop-opacity=".9"/>
+          <stop offset="55%" stop-color="var(--accent)" stop-opacity=".22"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <!-- brain (clipped to cranium) -->
+      <g clip-path="url(#cranium)">
+        <circle id="brainCore" cx="178" cy="120" r="96" fill="url(#brainGlow)"/>
+        <g id="gyri" fill="none" stroke="var(--accent)" stroke-width="1.4" opacity=".55"></g>
+        <g id="fires" fill="var(--accent)"></g>
+      </g>
+
+      <!-- skull outline -->
+      <g fill="none" stroke="var(--accent)" stroke-width="2" opacity=".85">
+        <!-- cranium + face profile (facing left) -->
+        <path d="M274 128
+                 C274 74 232 40 176 38
+                 C120 36 82 74 80 122
+                 C79 140 66 146 60 158
+                 C54 170 66 178 76 181
+                 L74 196
+                 C73 210 82 218 98 219"/>
+        <!-- eye socket -->
+        <circle cx="118" cy="150" r="27" fill="rgba(0,0,0,.55)" stroke="var(--accent)"/>
+        <!-- brow ridge -->
+        <path d="M92 122 C104 116 132 116 146 124" stroke-width="1.6" opacity=".7"/>
+        <!-- nasal cavity -->
+        <path d="M78 181 L70 200 L86 200 Z" fill="rgba(0,0,0,.5)" stroke-width="1.4"/>
+        <!-- cheekbone -->
+        <path d="M138 158 C158 168 176 168 196 160" stroke-width="1.3" opacity=".55"/>
+        <!-- upper jaw / teeth base -->
+        <path d="M98 219 L172 224" stroke-width="1.6"/>
+        <!-- mandible (lower jaw) -->
+        <path d="M98 219 C96 244 120 258 150 256 C182 254 206 240 210 208"
+              stroke-width="2"/>
+        <!-- jaw hinge -->
+        <path d="M210 208 C224 196 232 176 230 158" stroke-width="1.4" opacity=".6"/>
+      </g>
+      <!-- teeth -->
+      <g id="teeth" stroke="var(--accent)" stroke-width="1.1" opacity=".6"></g>
+    </svg>
+    <div class="statusword" id="statusword">STANDBY</div>
+    <div class="subword" id="subword">awaiting "Jarvis"</div>
   </div>
 
-  <div class="col-right">
+  <div class="col">
     <div class="panel grow">
       <div class="ptitle"><span>SYSTEM //</span><b>RT-LOG</b></div>
+      <div class="tabs" id="tabs">
+        <button data-f="all" class="on">ALL</button>
+        <button data-f="user">CMDS</button>
+        <button data-f="action">ACTIONS</button>
+        <button data-f="system">SYSTEM</button>
+      </div>
       <div class="log" id="log"></div>
     </div>
     <div class="panel" style="flex:0 0 42%">
@@ -124,186 +213,145 @@
 </div>
 
 <script>
-const $ = id => document.getElementById(id);
+const $=id=>document.getElementById(id);
 
-/* ---------- reactive neural / heartbeat core ---------- */
-const cv = $("core"), cx = cv.getContext("2d");
-let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
-
-function resize(){
-  const r = cv.getBoundingClientRect();
-  W = r.width; H = r.height;
-  cv.width = W * DPR; cv.height = H * DPR;
-  cx.setTransform(DPR,0,0,DPR,0,0);
-}
-new ResizeObserver(resize).observe(cv);
-window.addEventListener("resize", resize); resize();
-
-// status -> feel of the core
-const STYLE = {
-  starting:{bpm:70, rgb:[55,208,230], fire:.3, ring:.6},
-  standby: {bpm:56, rgb:[55,208,230], fire:.25,ring:.5},
-  listening:{bpm:92,rgb:[120,232,255],fire:.5, ring:1.2},
-  thinking:{bpm:138,rgb:[255,180,58], fire:1.0, ring:1.0},
-  speaking:{bpm:108,rgb:[55,230,160], fire:.7, ring:1.4},
-  asleep:  {bpm:26, rgb:[36,96,130],  fire:.08,ring:.2},
-  off:     {bpm:0,  rgb:[90,92,104],  fire:0,  ring:0},
+/* ---------- themes ---------- */
+const THEMES={
+  cyan:["#37d0e6","#1b6d7a"], amber:["#e6a437","#7a5a1b"],
+  emerald:["#37e69a","#1b7a55"], violet:["#a97bff","#5a3ba0"], crimson:["#ff5a6e","#7a2632"],
 };
-let cur = {...STYLE.standby, rgb:[...STYLE.standby.rgb]};
-let target = STYLE.standby;
-let statusName = "standby";
-
-// brain node cloud (points on a sphere)
-const N = 190, nodes = [];
-for(let i=0;i<N;i++){
-  const y = 1 - (i/(N-1))*2;
-  const rad = Math.sqrt(1-y*y);
-  const theta = i * 2.399963; // golden angle
-  nodes.push({x:Math.cos(theta)*rad, y, z:Math.sin(theta)*rad, f:Math.random()});
+function applyTheme(name){
+  const [a,a2]=THEMES[name]||THEMES.cyan;
+  document.documentElement.style.setProperty("--accent",a);
+  document.documentElement.style.setProperty("--accent2",a2);
+  document.documentElement.style.setProperty("--glow", a+"88");
+  document.documentElement.style.setProperty("--line", a+"3d");
+  localStorage.setItem("jarvisTheme",name);
+  [...document.querySelectorAll(".swatch")].forEach(s=>s.classList.toggle("on",s.dataset.t===name));
 }
-const rings = [];   // expanding pulse rings
-let beatPhase = 0, lastBeat = -1, t0 = performance.now();
+const sw=$("swatches");
+Object.entries(THEMES).forEach(([n,[a]])=>{
+  const b=document.createElement("button");
+  b.className="swatch";b.dataset.t=n;b.style.background=a;b.title=n;
+  b.onclick=()=>applyTheme(n);sw.appendChild(b);
+});
+applyTheme(localStorage.getItem("jarvisTheme")||"cyan");
 
-function heartbeat(x){ // x in [0,1) -> lub-dub curve 0..1
-  const a = Math.exp(-Math.pow((x-0.10)/0.045,2));
-  const b = 0.55*Math.exp(-Math.pow((x-0.26)/0.055,2));
-  return Math.min(1, a+b);
+/* ---------- build brain gyri + teeth ---------- */
+const gyri=$("gyri");
+for(let i=0;i<7;i++){
+  const y=70+i*17, amp=6+((i*13)%9);
+  let d=`M84 ${y}`;
+  for(let x=84;x<=272;x+=16){ d+=` Q${x+8} ${y+(x/16%2?amp:-amp)} ${x+16} ${y}`; }
+  const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+  p.setAttribute("d",d);gyri.appendChild(p);
 }
-const lerp=(a,b,k)=>a+(b-a)*k;
-const rgb=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
-
-function frame(now){
-  const dt = Math.min(0.05,(now - t0)/1000); t0 = now;
-  // ease colours & values toward the current status
-  cur.bpm = lerp(cur.bpm, target.bpm, .05);
-  cur.fire = lerp(cur.fire, target.fire, .05);
-  cur.ring = lerp(cur.ring, target.ring, .05);
-  for(let i=0;i<3;i++) cur.rgb[i] = lerp(cur.rgb[i], target.rgb[i], .05);
-
-  cx.clearRect(0,0,W,H);
-  const cxp=W/2, cyp=H/2, base=Math.min(W,H)*0.16;
-
-  // beat timing
-  let beat=0;
-  if(cur.bpm>1){
-    const period = 60/cur.bpm;
-    beatPhase = (beatPhase + dt/period) % 1;
-    beat = heartbeat(beatPhase);
-    if(beatPhase < lastBeat){ // new beat -> spawn ring
-      rings.push({r:base*0.9, a:0.5*cur.ring});
-    }
-    lastBeat = beatPhase;
-  }
-
-  // expanding rings
-  for(let i=rings.length-1;i>=0;i--){
-    const rg=rings[i];
-    rg.r += (Math.min(W,H)*0.35)*dt;
-    rg.a -= 0.35*dt;
-    if(rg.a<=0){ rings.splice(i,1); continue; }
-    cx.beginPath(); cx.arc(cxp,cyp,rg.r,0,7);
-    cx.strokeStyle=rgb(cur.rgb,rg.a); cx.lineWidth=1.5; cx.stroke();
-  }
-
-  // rotating brain node cloud + synapses
-  const rot=now/2600, cosR=Math.cos(rot), sinR=Math.sin(rot);
-  const R=Math.min(W,H)*0.30, pts=[];
-  for(const n of nodes){
-    const x = n.x*cosR - n.z*sinR;
-    const z = n.x*sinR + n.z*cosR;
-    const depth=(z+1)/2;               // 0 back .. 1 front
-    n.f += (Math.random()-0.5)*cur.fire*0.15;
-    n.f = Math.max(0,Math.min(1,n.f));
-    pts.push({sx:cxp+x*R, sy:cyp+n.y*R*0.92, depth, f:n.f});
-  }
-  // synapse lines between nearby nodes
-  cx.lineWidth=1;
-  for(let i=0;i<pts.length;i++){
-    const p=pts[i];
-    for(let j=i+1;j<i+6 && j<pts.length;j++){
-      const q=pts[j], dx=p.sx-q.sx, dy=p.sy-q.sy;
-      const d2=dx*dx+dy*dy;
-      if(d2 < (R*0.28)*(R*0.28)){
-        const a=(1-Math.sqrt(d2)/(R*0.28))*0.18*((p.depth+q.depth)/2);
-        cx.strokeStyle=rgb(cur.rgb,a); cx.beginPath();
-        cx.moveTo(p.sx,p.sy); cx.lineTo(q.sx,q.sy); cx.stroke();
-      }
-    }
-  }
-  // node dots (firing)
-  for(const p of pts){
-    const glow=0.25+0.75*p.f, size=(0.7+p.depth*1.8)*(0.8+beat*0.5);
-    cx.fillStyle=rgb(cur.rgb, (0.2+0.8*p.depth)*glow);
-    cx.beginPath(); cx.arc(p.sx,p.sy,size,0,7); cx.fill();
-  }
-
-  // pulsing core orb (the "heart")
-  const rCore = base*(0.75 + beat*0.42);
-  const g=cx.createRadialGradient(cxp,cyp,0,cxp,cyp,rCore);
-  g.addColorStop(0, rgb(cur.rgb, 0.95));
-  g.addColorStop(0.4, rgb(cur.rgb, 0.5));
-  g.addColorStop(1, rgb(cur.rgb, 0));
-  cx.fillStyle=g; cx.beginPath(); cx.arc(cxp,cyp,rCore,0,7); cx.fill();
-  // bright center
-  cx.fillStyle=rgb([Math.min(255,cur.rgb[0]+90),Math.min(255,cur.rgb[1]+90),Math.min(255,cur.rgb[2]+90)], 0.6+beat*0.4);
-  cx.beginPath(); cx.arc(cxp,cyp,base*0.28*(0.9+beat*0.3),0,7); cx.fill();
-
-  // crosshair reticle
-  cx.strokeStyle=rgb(cur.rgb,0.12); cx.lineWidth=1;
-  cx.beginPath();
-  cx.moveTo(cxp-R,cyp); cx.lineTo(cxp+R,cyp);
-  cx.moveTo(cxp,cyp-R); cx.lineTo(cxp,cyp+R); cx.stroke();
-
-  requestAnimationFrame(frame);
+// firing nodes along the brain
+const fires=$("fires"), NODES=[];
+for(let i=0;i<46;i++){
+  const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
+  const x=90+Math.random()*176, y=64+Math.random()*130;
+  c.setAttribute("cx",x);c.setAttribute("cy",y);c.setAttribute("r",1.6+Math.random()*1.8);
+  c.setAttribute("opacity",0);fires.appendChild(c);NODES.push({el:c,ph:Math.random()});
 }
-requestAnimationFrame(frame);
+const teeth=$("teeth");
+for(let i=0;i<7;i++){
+  const x=100+i*10;
+  const l=document.createElementNS("http://www.w3.org/2000/svg","line");
+  l.setAttribute("x1",x);l.setAttribute("y1",219);l.setAttribute("x2",x-1);l.setAttribute("y2",231);
+  teeth.appendChild(l);
+}
+
+/* ---------- brain animation reacting to status ---------- */
+const FEEL={
+  starting:{bpm:70,fire:.3}, standby:{bpm:54,fire:.22}, listening:{bpm:92,fire:.55},
+  thinking:{bpm:140,fire:1}, speaking:{bpm:108,fire:.7}, asleep:{bpm:24,fire:.05}, off:{bpm:0,fire:0},
+};
+let feel={...FEEL.standby}, target=FEEL.standby, statusName="standby";
+const head=$("head"), brainCore=$("brainCore");
+let t0=performance.now(), beat=0, phase=0;
+function hb(x){const g=(m,s)=>Math.exp(-(((x-m)/s)**2));return Math.min(1,g(0.1,0.05)+0.5*g(0.26,0.06));}
+function anim(now){
+  const dt=Math.min(.05,(now-t0)/1000); t0=now;
+  feel.bpm+=(target.bpm-feel.bpm)*.05; feel.fire+=(target.fire-feel.fire)*.05;
+  if(feel.bpm>1){ phase=(phase+dt/(60/feel.bpm))%1; beat=hb(phase); } else beat*=.95;
+  // pulse the whole head subtly + brain glow strongly
+  const s=1+beat*0.02; head.style.transform=`scale(${s})`;
+  brainCore.setAttribute("r", 78+beat*22);
+  brainCore.setAttribute("opacity", .5+beat*0.5);
+  for(const n of NODES){
+    n.ph+=dt*(0.4+feel.fire*1.8)*(0.5+Math.random());
+    const v=Math.max(0,Math.sin(n.ph*6.28));
+    n.el.setAttribute("opacity", (v*v)*(0.3+feel.fire*0.7));
+  }
+  requestAnimationFrame(anim);
+}
+requestAnimationFrame(anim);
 
 /* ---------- controls ---------- */
-$("fsBtn").onclick = () => document.fullscreenElement
-  ? document.exitFullscreen() : document.documentElement.requestFullscreen();
-$("focusBtn").onclick = () => document.body.classList.toggle("focus");
-addEventListener("keydown", e=>{
-  if(e.key==="f"||e.key==="F") document.body.classList.toggle("focus");
-  if(e.key==="Escape") document.body.classList.remove("focus");
-});
+$("fsBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
+$("focusBtn").onclick=()=>document.body.classList.toggle("focus");
+addEventListener("keydown",e=>{if(e.key==="f"||e.key==="F")document.body.classList.toggle("focus");if(e.key==="Escape")document.body.classList.remove("focus");});
 
-/* ---------- state polling ---------- */
-const SUB={starting:"initializing",standby:'awaiting "Hey Jarvis"',listening:"listening…",
+/* ---------- log filter ---------- */
+let filter="all", lastLog=[];
+$("tabs").querySelectorAll("button").forEach(b=>b.onclick=()=>{
+  filter=b.dataset.f;$("tabs").querySelectorAll("button").forEach(x=>x.classList.toggle("on",x===b));renderLog();
+});
+function renderLog(){
+  const rows=lastLog.filter(e=>filter==="all"||e.kind===filter||(filter==="user"&&e.kind==="jarvis"));
+  $("log").innerHTML=rows.slice().reverse().map(e=>
+    `<div class="row"><span class="t">[${e.t}]</span> <span class="${e.kind}">${
+      e.kind==="user"?"▸ ":e.kind==="jarvis"?"◂ ":e.kind==="action"?"⚡ ":"· "}${esc(e.text)}</span></div>`).join("");
+}
+
+/* ---------- sparklines ---------- */
+function mkSpark(cv){const c=cv.getContext("2d");const data=[];
+  function draw(){const w=cv.width=cv.clientWidth,h=cv.height=cv.clientHeight;c.clearRect(0,0,w,h);
+    if(data.length<2)return;const a=getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+    c.beginPath();data.forEach((v,i)=>{const x=i/(data.length-1)*w,y=h-(v/100)*h;i?c.lineTo(x,y):c.moveTo(x,y);});
+    c.strokeStyle=a;c.lineWidth=1.5;c.shadowColor=a;c.shadowBlur=6;c.stroke();
+    c.lineTo(w,h);c.lineTo(0,h);c.closePath();c.globalAlpha=.12;c.fillStyle=a;c.fill();c.globalAlpha=1;}
+  return {push(v){data.push(v);if(data.length>70)data.shift();draw();},redraw:draw};}
+const cpuSpark=mkSpark($("cpuSpark")), memSpark=mkSpark($("memSpark"));
+
+/* ---------- state ---------- */
+const SUB={starting:"initializing",standby:'awaiting "Jarvis"',listening:"listening…",
   thinking:"processing",speaking:"responding",asleep:"dormant",off:"offline"};
-function fmtUptime(s){const h=(s/3600)|0,m=((s%3600)/60)|0,ss=s%60;
-  return (h?h+"h ":"")+(m||h?m+"m ":"")+ss+"s";}
-function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+let cmds=0,acts=0,lastCmd="",seenActs=new Set(),peakMem=0;
+function fmtUp(s){const h=(s/3600)|0,m=((s%3600)/60)|0,x=s%60;return(h?h+"h ":"")+(m||h?m+"m ":"")+x+"s";}
+function esc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 
 async function tick(){
   $("hclock").textContent=new Date().toLocaleTimeString();
   try{
-    const s=await (await fetch("/state")).json();
+    const s=await(await fetch("/state")).json();
     const st=s.status||"standby";
-    if(st!==statusName){ statusName=st; target=STYLE[st]||STYLE.standby; }
+    if(st!==statusName){statusName=st;target=FEEL[st]||FEEL.standby;}
+    $("statusword").textContent=st.toUpperCase();$("subword").textContent=SUB[st]||"";
     $("hstatus").innerHTML='<span class="dot"></span>'+st.toUpperCase();
-    $("statuslabel").textContent=(SUB[st]||st);
     $("hver").textContent=s.version?("v"+s.version):"—";
-    $("hmodel").textContent=s.model||"—";
-    $("hengine").textContent=s.engine||"—";
-    $("huptime").textContent=fmtUptime(s.uptime_s||0);
-    $("project").textContent=s.active_project||"none set";
-    $("voice").textContent=s.voice||"—";
-    if(s.cpu!=null){$("cpu").textContent=Math.round(s.cpu)+"%";$("cpubar").style.width=s.cpu+"%";}
-    if(s.mem_pct!=null){$("mem").textContent=(s.mem_used_gb||0)+" / "+(s.mem_total_gb||0)+" GB";$("membar").style.width=s.mem_pct+"%";}
-    if(s.disk_pct!=null){$("disk").textContent=Math.round(s.disk_pct)+"%";$("diskbar").style.width=s.disk_pct+"%";}
-    $("cmd").textContent=s.last_command||"—";
-    $("rep").textContent=s.last_reply||"—";
-    $("log").innerHTML=(s.log||[]).slice().reverse().map(e=>
-      `<div class="row"><span class="t">[${e.t}]</span> <span class="${e.kind}">${
-        e.kind==="user"?"▸ ":e.kind==="jarvis"?"◂ ":e.kind==="action"?"⚡ ":"· "
-      }${esc(e.text)}</span></div>`).join("");
+    $("hmodel").textContent=s.model||"—";$("engine").textContent=s.engine||"—";
+    $("huptime").textContent=fmtUp(s.uptime_s||0);$("stTime").textContent=fmtUp(s.uptime_s||0);
+    $("project").textContent=s.active_project||"none set";$("voice").textContent=s.voice||"—";
+    if(s.cpu!=null){$("cpu").textContent=Math.round(s.cpu)+"%";cpuSpark.push(s.cpu);}
+    if(s.mem_pct!=null){$("mem").textContent=(s.mem_used_gb||0)+" / "+(s.mem_total_gb||0)+" GB";
+      memSpark.push(s.mem_pct);peakMem=Math.max(peakMem,s.mem_pct);$("stPeak").textContent=Math.round(peakMem)+"%";}
+    if(s.disk_pct!=null){$("disk").textContent=Math.round(s.disk_pct)+"%";$("diskbar").style.right=(100-s.disk_pct)+"%";}
+    $("cmd").textContent=s.last_command||"—";$("rep").textContent=s.last_reply||"—";
+    // session counters
+    if(s.last_command&&s.last_command!==lastCmd){lastCmd=s.last_command;cmds++;$("stCmds").textContent=cmds;}
+    (s.log||[]).forEach(e=>{if(e.kind==="action"){const k=e.t+e.text;if(!seenActs.has(k)){seenActs.add(k);acts++;}}});
+    $("stActs").textContent=acts;
+    lastLog=s.log||[];renderLog();
   }catch(e){
-    statusName="off"; target=STYLE.off;
+    statusName="off";target=FEEL.off;
+    $("statusword").textContent="OFFLINE";$("subword").textContent="voice service not running";
     $("hstatus").innerHTML='<span class="dot" style="background:var(--warn);box-shadow:0 0 10px var(--warn)"></span>OFFLINE';
-    $("statuslabel").textContent="voice service offline";
   }
 }
-tick(); setInterval(tick,1000);
+tick();setInterval(tick,1000);
+addEventListener("resize",()=>{cpuSpark.redraw();memSpark.redraw();});
 </script>
 </body>
 </html>
