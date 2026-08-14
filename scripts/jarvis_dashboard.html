@@ -58,7 +58,7 @@
     flex-direction:column;align-items:center;justify-content:center}
   .stage{position:relative;display:inline-flex;line-height:0}
   #gem3d{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
-    width:40%;aspect-ratio:1;pointer-events:none}
+    width:56%;aspect-ratio:1;pointer-events:none}
   #gem3d canvas{width:100%!important;height:100%!important}
 
   .meter{margin:10px 0}
@@ -146,7 +146,7 @@
 
   <div class="center">
     <div class="stage">
-    <svg id="core" viewBox="0 0 400 400" width="min(58vh,640px)" style="max-width:100%">
+    <svg id="core" viewBox="0 0 400 400" width="min(76vh,900px)" style="max-width:100%">
       <defs>
         <radialGradient id="gemGlow" cx="50%" cy="48%" r="55%">
           <stop offset="0%"  stop-color="var(--accent)" stop-opacity=".95"/>
@@ -161,8 +161,8 @@
       </defs>
 
       <!-- circuit traces + energy pulses (generated) -->
-      <g id="traces" fill="none" stroke="var(--accent)" stroke-width="1.3" opacity=".4"></g>
-      <g id="pads" fill="var(--accent)" opacity=".5"></g>
+      <g id="traces" fill="none" stroke="var(--accent)" stroke-width="2.3" opacity=".55"></g>
+      <g id="pads" fill="var(--accent)" opacity=".65"></g>
       <g id="pulses" fill="var(--accent)"></g>
 
       <!-- CPU chip -->
@@ -279,18 +279,19 @@ function addTrace(sx,sy,sign){
   for(const [px,py] of [[midx,y2],[edgeX,y2]]){
     const r=document.createElementNS(SVGNS,"rect");
     r.setAttribute("x",px-2.5);r.setAttribute("y",py-2.5);
-    r.setAttribute("width",5);r.setAttribute("height",5);padsG.appendChild(r);
+    r.setAttribute("width",6);r.setAttribute("height",6);padsG.appendChild(r);
   }
 }
-for(let i=0;i<5;i++){ addTrace(150,220+i*11,-1); addTrace(250,220+i*11,1); }
-addTrace(178,212,-1); addTrace(222,212,1); addTrace(184,274,-1); addTrace(216,274,1);
+for(let i=0;i<6;i++){ addTrace(150,216+i*10,-1); addTrace(250,216+i*10,1); }
+addTrace(172,212,-1); addTrace(200,212,-1); addTrace(228,212,1);
+addTrace(178,274,-1); addTrace(200,274,1); addTrace(222,274,1);
 
 // energy pulses that travel along the traces
 const PULSES=[];
 TRACES.forEach((t,i)=>{
   for(let k=0;k<1+(i%2);k++){
     const c=document.createElementNS(SVGNS,"circle");
-    c.setAttribute("r",2.4);pulsesG.appendChild(c);
+    c.setAttribute("r",3.6);pulsesG.appendChild(c);
     PULSES.push({t,el:c,p:Math.random()});
   }
 });
@@ -345,7 +346,7 @@ function init3D(){
   if(!window.THREE||!host){return;}
   $("gem").style.display="none"; // hide the flat gem; 3D takes over
   const scene=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(40,1,0.1,100); cam.position.set(0,0,5.2);
+  const cam=new THREE.PerspectiveCamera(40,1,0.1,100); cam.position.set(0,0,4.5);
   const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
   renderer.setPixelRatio(Math.min(devicePixelRatio,2));
   const size=()=>{const w=host.clientWidth||280;renderer.setSize(w,w);};
