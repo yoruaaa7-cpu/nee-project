@@ -141,51 +141,57 @@
   </div>
 
   <div class="center">
-    <svg id="head" viewBox="0 0 320 340" width="min(52vh,560px)" style="max-width:100%">
+    <svg id="core" viewBox="0 0 400 400" width="min(58vh,640px)" style="max-width:100%">
       <defs>
-        <clipPath id="cranium"><ellipse cx="178" cy="132" rx="104" ry="98"/></clipPath>
-        <radialGradient id="brainGlow" cx="50%" cy="45%" r="60%">
-          <stop offset="0%"  stop-color="var(--accent)" stop-opacity=".9"/>
-          <stop offset="55%" stop-color="var(--accent)" stop-opacity=".22"/>
+        <radialGradient id="gemGlow" cx="50%" cy="48%" r="55%">
+          <stop offset="0%"  stop-color="var(--accent)" stop-opacity=".95"/>
+          <stop offset="45%" stop-color="var(--accent)" stop-opacity=".28"/>
           <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
         </radialGradient>
+        <linearGradient id="gemFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"  stop-color="#ffffff" stop-opacity=".85"/>
+          <stop offset="45%" stop-color="var(--accent)" stop-opacity=".5"/>
+          <stop offset="100%" stop-color="var(--accent)" stop-opacity=".18"/>
+        </linearGradient>
       </defs>
 
-      <!-- brain (clipped to cranium) -->
-      <g clip-path="url(#cranium)">
-        <circle id="brainCore" cx="178" cy="120" r="96" fill="url(#brainGlow)"/>
-        <g id="gyri" fill="none" stroke="var(--accent)" stroke-width="1.4" opacity=".55"></g>
-        <g id="fires" fill="var(--accent)"></g>
+      <!-- circuit traces + energy pulses (generated) -->
+      <g id="traces" fill="none" stroke="var(--accent)" stroke-width="1.3" opacity=".4"></g>
+      <g id="pads" fill="var(--accent)" opacity=".5"></g>
+      <g id="pulses" fill="var(--accent)"></g>
+
+      <!-- CPU chip -->
+      <g id="chip">
+        <rect x="150" y="212" width="100" height="62" rx="4"
+              fill="rgba(6,14,20,.92)" stroke="var(--accent)" stroke-width="1.6"/>
+        <rect x="166" y="226" width="68" height="34" fill="none"
+              stroke="var(--accent)" stroke-width="1" opacity=".5"/>
+        <g id="pins" stroke="var(--accent)" stroke-width="1.4" opacity=".7"></g>
       </g>
 
-      <!-- skull outline -->
-      <g fill="none" stroke="var(--accent)" stroke-width="2" opacity=".85">
-        <!-- cranium + face profile (facing left) -->
-        <path d="M274 128
-                 C274 74 232 40 176 38
-                 C120 36 82 74 80 122
-                 C79 140 66 146 60 158
-                 C54 170 66 178 76 181
-                 L74 196
-                 C73 210 82 218 98 219"/>
-        <!-- eye socket -->
-        <circle cx="118" cy="150" r="27" fill="rgba(0,0,0,.55)" stroke="var(--accent)"/>
-        <!-- brow ridge -->
-        <path d="M92 122 C104 116 132 116 146 124" stroke-width="1.6" opacity=".7"/>
-        <!-- nasal cavity -->
-        <path d="M78 181 L70 200 L86 200 Z" fill="rgba(0,0,0,.5)" stroke-width="1.4"/>
-        <!-- cheekbone -->
-        <path d="M138 158 C158 168 176 168 196 160" stroke-width="1.3" opacity=".55"/>
-        <!-- upper jaw / teeth base -->
-        <path d="M98 219 L172 224" stroke-width="1.6"/>
-        <!-- mandible (lower jaw) -->
-        <path d="M98 219 C96 244 120 258 150 256 C182 254 206 240 210 208"
-              stroke-width="2"/>
-        <!-- jaw hinge -->
-        <path d="M210 208 C224 196 232 176 230 158" stroke-width="1.4" opacity=".6"/>
+      <!-- glow behind the gem -->
+      <circle id="glow" cx="200" cy="188" r="90" fill="url(#gemGlow)"/>
+
+      <!-- faceted diamond -->
+      <g id="gem">
+        <polygon points="172,150 228,150 260,178 200,236 140,178"
+                 fill="url(#gemFill)" stroke="var(--accent)" stroke-width="2"/>
+        <g id="facets" stroke="var(--accent)" stroke-width="1" opacity=".7" fill="none">
+          <line x1="140" y1="178" x2="260" y2="178"/>
+          <line x1="172" y1="150" x2="140" y2="178"/>
+          <line x1="228" y1="150" x2="260" y2="178"/>
+          <line x1="172" y1="150" x2="172" y2="178"/>
+          <line x1="228" y1="150" x2="228" y2="178"/>
+          <line x1="172" y1="150" x2="200" y2="178"/>
+          <line x1="228" y1="150" x2="200" y2="178"/>
+          <line x1="140" y1="178" x2="200" y2="236"/>
+          <line x1="260" y1="178" x2="200" y2="236"/>
+          <line x1="172" y1="178" x2="200" y2="236"/>
+          <line x1="228" y1="178" x2="200" y2="236"/>
+          <line x1="200" y1="178" x2="200" y2="236"/>
+        </g>
+        <circle id="sparkle" cx="200" cy="176" r="4" fill="#ffffff" opacity="0"/>
       </g>
-      <!-- teeth -->
-      <g id="teeth" stroke="var(--accent)" stroke-width="1.1" opacity=".6"></g>
     </svg>
     <div class="statusword" id="statusword">STANDBY</div>
     <div class="subword" id="subword">awaiting "Jarvis"</div>
@@ -237,52 +243,81 @@ Object.entries(THEMES).forEach(([n,[a]])=>{
 });
 applyTheme(localStorage.getItem("jarvisTheme")||"cyan");
 
-/* ---------- build brain gyri + teeth ---------- */
-const gyri=$("gyri");
-for(let i=0;i<7;i++){
-  const y=70+i*17, amp=6+((i*13)%9);
-  let d=`M84 ${y}`;
-  for(let x=84;x<=272;x+=16){ d+=` Q${x+8} ${y+(x/16%2?amp:-amp)} ${x+16} ${y}`; }
-  const p=document.createElementNS("http://www.w3.org/2000/svg","path");
-  p.setAttribute("d",d);gyri.appendChild(p);
-}
-// firing nodes along the brain
-const fires=$("fires"), NODES=[];
-for(let i=0;i<46;i++){
-  const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
-  const x=90+Math.random()*176, y=64+Math.random()*130;
-  c.setAttribute("cx",x);c.setAttribute("cy",y);c.setAttribute("r",1.6+Math.random()*1.8);
-  c.setAttribute("opacity",0);fires.appendChild(c);NODES.push({el:c,ph:Math.random()});
-}
-const teeth=$("teeth");
-for(let i=0;i<7;i++){
-  const x=100+i*10;
-  const l=document.createElementNS("http://www.w3.org/2000/svg","line");
-  l.setAttribute("x1",x);l.setAttribute("y1",219);l.setAttribute("x2",x-1);l.setAttribute("y2",231);
-  teeth.appendChild(l);
+/* ---------- build circuit traces + energy pulses ---------- */
+const SVGNS="http://www.w3.org/2000/svg";
+const tracesG=$("traces"), padsG=$("pads"), pulsesG=$("pulses"), pinsG=$("pins");
+const glow=$("glow"), facets=$("facets"), sparkle=$("sparkle");
+
+// CPU pins along top & bottom edges of the chip
+for(let i=0;i<9;i++){
+  const x=158+i*10.5;
+  for(const [y,dy] of [[212,-8],[274,8]]){
+    const l=document.createElementNS(SVGNS,"line");
+    l.setAttribute("x1",x);l.setAttribute("y1",y);l.setAttribute("x2",x);l.setAttribute("y2",y+dy);
+    pinsG.appendChild(l);
+  }
 }
 
-/* ---------- brain animation reacting to status ---------- */
+// traces radiate from the chip edge outward (manhattan routing), ending at pads
+const TRACES=[];
+function addTrace(sx,sy,sign){
+  const midx=Math.round(sx+sign*(24+Math.random()*48));
+  const y2=Math.round(Math.max(22,Math.min(378, sy+(Math.random()-0.5)*230)));
+  const edgeX=sign>0?396:4;
+  const d=`M${sx} ${sy} H${midx} V${y2} H${edgeX}`;
+  const p=document.createElementNS(SVGNS,"path");
+  p.setAttribute("d",d);tracesG.appendChild(p);
+  TRACES.push({p,len:p.getTotalLength()});
+  for(const [px,py] of [[midx,y2],[edgeX,y2]]){
+    const r=document.createElementNS(SVGNS,"rect");
+    r.setAttribute("x",px-2.5);r.setAttribute("y",py-2.5);
+    r.setAttribute("width",5);r.setAttribute("height",5);padsG.appendChild(r);
+  }
+}
+for(let i=0;i<5;i++){ addTrace(150,220+i*11,-1); addTrace(250,220+i*11,1); }
+addTrace(178,212,-1); addTrace(222,212,1); addTrace(184,274,-1); addTrace(216,274,1);
+
+// energy pulses that travel along the traces
+const PULSES=[];
+TRACES.forEach((t,i)=>{
+  for(let k=0;k<1+(i%2);k++){
+    const c=document.createElementNS(SVGNS,"circle");
+    c.setAttribute("r",2.4);pulsesG.appendChild(c);
+    PULSES.push({t,el:c,p:Math.random()});
+  }
+});
+
+/* ---------- reaction to status ----------
+   flow: -1 = pumping INWARD to the jewel (asking), +1 = radiating out (answering)
+   charge: how brightly the diamond shines                                        */
 const FEEL={
-  starting:{bpm:70,fire:.3}, standby:{bpm:54,fire:.22}, listening:{bpm:92,fire:.55},
-  thinking:{bpm:140,fire:1}, speaking:{bpm:108,fire:.7}, asleep:{bpm:24,fire:.05}, off:{bpm:0,fire:0},
+  starting:{charge:.4,flow:-1,speed:.28}, standby:{charge:.22,flow:-1,speed:.12},
+  listening:{charge:.55,flow:-1,speed:.5}, thinking:{charge:.85,flow:-1,speed:.9},
+  speaking:{charge:1,flow:1,speed:.55}, asleep:{charge:.05,flow:-1,speed:.04}, off:{charge:0,flow:0,speed:0},
 };
-let feel={...FEEL.standby}, target=FEEL.standby, statusName="standby";
-const head=$("head"), brainCore=$("brainCore");
-let t0=performance.now(), beat=0, phase=0;
-function hb(x){const g=(m,s)=>Math.exp(-(((x-m)/s)**2));return Math.min(1,g(0.1,0.05)+0.5*g(0.26,0.06));}
+let feel={charge:.22,flow:-1,speed:.12}, target=FEEL.standby, statusName="standby";
+let t0=performance.now();
 function anim(now){
   const dt=Math.min(.05,(now-t0)/1000); t0=now;
-  feel.bpm+=(target.bpm-feel.bpm)*.05; feel.fire+=(target.fire-feel.fire)*.05;
-  if(feel.bpm>1){ phase=(phase+dt/(60/feel.bpm))%1; beat=hb(phase); } else beat*=.95;
-  // pulse the whole head subtly + brain glow strongly
-  const s=1+beat*0.02; head.style.transform=`scale(${s})`;
-  brainCore.setAttribute("r", 78+beat*22);
-  brainCore.setAttribute("opacity", .5+beat*0.5);
-  for(const n of NODES){
-    n.ph+=dt*(0.4+feel.fire*1.8)*(0.5+Math.random());
-    const v=Math.max(0,Math.sin(n.ph*6.28));
-    n.el.setAttribute("opacity", (v*v)*(0.3+feel.fire*0.7));
+  feel.charge+=(target.charge-feel.charge)*.06;
+  feel.speed +=(target.speed -feel.speed )*.10;
+  const flow=target.flow;
+
+  glow.setAttribute("opacity",(0.16+0.84*feel.charge).toFixed(3));
+  glow.setAttribute("r",(78+feel.charge*30).toFixed(1));
+  facets.setAttribute("opacity",(0.4+0.6*feel.charge).toFixed(2));
+  sparkle.setAttribute("opacity",(Math.max(0,feel.charge-0.6)*2.2).toFixed(2));
+  sparkle.setAttribute("r",(3+feel.charge*6).toFixed(1));
+
+  const intensity=0.45+0.55*feel.charge;
+  for(const pu of PULSES){
+    if(flow===0){pu.el.setAttribute("opacity",0);continue;}
+    pu.p += flow*feel.speed*dt;
+    if(pu.p>1)pu.p-=1; if(pu.p<0)pu.p+=1;
+    const pt=pu.t.p.getPointAtLength(pu.p*pu.t.len);  // p=0 at chip/gem, 1 at edge
+    pu.el.setAttribute("cx",pt.x.toFixed(1));
+    pu.el.setAttribute("cy",pt.y.toFixed(1));
+    pu.el.setAttribute("opacity",((0.15+0.85*(1-pu.p))*intensity).toFixed(3));
   }
   requestAnimationFrame(anim);
 }
