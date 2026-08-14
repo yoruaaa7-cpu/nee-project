@@ -56,6 +56,10 @@
   .col{display:flex;flex-direction:column;gap:14px;grid-row:2/4;min-height:0}
   .center{grid-column:2;grid-row:2/4;position:relative;display:flex;
     flex-direction:column;align-items:center;justify-content:center}
+  .stage{position:relative;display:inline-flex;line-height:0}
+  #gem3d{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
+    width:40%;aspect-ratio:1;pointer-events:none}
+  #gem3d canvas{width:100%!important;height:100%!important}
 
   .meter{margin:10px 0}
   .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:var(--muted);margin-bottom:5px}
@@ -141,6 +145,7 @@
   </div>
 
   <div class="center">
+    <div class="stage">
     <svg id="core" viewBox="0 0 400 400" width="min(58vh,640px)" style="max-width:100%">
       <defs>
         <radialGradient id="gemGlow" cx="50%" cy="48%" r="55%">
@@ -193,6 +198,8 @@
         <circle id="sparkle" cx="200" cy="176" r="4" fill="#ffffff" opacity="0"/>
       </g>
     </svg>
+    <div id="gem3d"></div>
+    </div>
     <div class="statusword" id="statusword">STANDBY</div>
     <div class="subword" id="subword">awaiting "Jarvis"</div>
   </div>
@@ -234,6 +241,7 @@ function applyTheme(name){
   document.documentElement.style.setProperty("--line", a+"3d");
   localStorage.setItem("jarvisTheme",name);
   [...document.querySelectorAll(".swatch")].forEach(s=>s.classList.toggle("on",s.dataset.t===name));
+  if(window._recolorGem) window._recolorGem();
 }
 const sw=$("swatches");
 Object.entries(THEMES).forEach(([n,[a]])=>{
@@ -322,6 +330,52 @@ function anim(now){
   requestAnimationFrame(anim);
 }
 requestAnimationFrame(anim);
+
+/* ---------- optional 3D diamond (Three.js from CDN; 2D gem is the fallback) ---------- */
+function accentHex(){return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#37d0e6";}
+(function load3D(){
+  const s=document.createElement("script");
+  s.src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js";
+  s.onload=init3D;
+  s.onerror=()=>console.log("[jarvis] 3D gem unavailable (offline) — using 2D diamond");
+  document.head.appendChild(s);
+})();
+function init3D(){
+  const host=$("gem3d");
+  if(!window.THREE||!host){return;}
+  $("gem").style.display="none"; // hide the flat gem; 3D takes over
+  const scene=new THREE.Scene();
+  const cam=new THREE.PerspectiveCamera(40,1,0.1,100); cam.position.set(0,0,5.2);
+  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  const size=()=>{const w=host.clientWidth||280;renderer.setSize(w,w);};
+  host.appendChild(renderer.domElement); size();
+
+  const col=new THREE.Color(accentHex());
+  const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.3,
+    metalness:.45,roughness:.12,flatShading:true,transparent:true,opacity:.94});
+  const gem=new THREE.Group();
+  const crown=new THREE.Mesh(new THREE.CylinderGeometry(0.55,1,0.42,8),mat); crown.position.y=0.56;
+  const pav=new THREE.Mesh(new THREE.ConeGeometry(1,1.3,8),mat); pav.rotation.x=Math.PI; pav.position.y=-0.29;
+  gem.add(crown,pav); gem.rotation.x=0.35; scene.add(gem);
+
+  scene.add(new THREE.AmbientLight(0xffffff,.55));
+  const pl=new THREE.PointLight(0xffffff,1.1); pl.position.set(3,4,5); scene.add(pl);
+  const pl2=new THREE.PointLight(col.getHex(),1.5); pl2.position.set(-4,-2,4); scene.add(pl2);
+
+  window._recolorGem=()=>{const c=new THREE.Color(accentHex());mat.color.copy(c);mat.emissive.copy(c);pl2.color.copy(c);};
+  new ResizeObserver(size).observe(host);
+
+  (function loop(){
+    const c=(typeof feel!=="undefined")?feel.charge:0.3;
+    gem.rotation.y+=0.006+c*0.03;
+    gem.rotation.x=0.35+Math.sin(performance.now()/2200)*0.08;
+    mat.emissiveIntensity=0.2+c*0.9;
+    gem.scale.setScalar(1+c*0.06);
+    renderer.render(scene,cam);
+    requestAnimationFrame(loop);
+  })();
+}
 
 /* ---------- controls ---------- */
 $("fsBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
