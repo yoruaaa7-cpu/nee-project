@@ -56,10 +56,9 @@
   .col{display:flex;flex-direction:column;gap:14px;grid-row:2/4;min-height:0}
   .center{grid-column:2;grid-row:2/4;position:relative;display:flex;
     flex-direction:column;align-items:center;justify-content:center}
-  .stage{position:relative;display:inline-flex;line-height:0}
-  #gem3d{position:absolute;left:50%;top:47%;transform:translate(-50%,-50%);
-    width:56%;aspect-ratio:1;pointer-events:none}
-  #gem3d canvas{width:100%!important;height:100%!important}
+  .yydesc{max-width:540px;text-align:center;color:var(--muted);font-size:12px;
+    letter-spacing:1px;line-height:1.7;margin-bottom:18px;font-style:italic}
+  #yy{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--accent) 25%,transparent))}
 
   .meter{margin:10px 0}
   .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:var(--muted);margin-bottom:5px}
@@ -145,61 +144,24 @@
   </div>
 
   <div class="center">
-    <div class="stage">
-    <svg id="core" viewBox="0 0 400 400" width="min(76vh,900px)" style="max-width:100%">
+    <div class="yydesc">A minimalist yin-yang, rotating in a continuous hypnotic loop —
+      gradual speed variation for a meditative visual effect.</div>
+    <svg id="yy" viewBox="0 0 400 400" width="min(66vh,760px)" style="max-width:100%">
       <defs>
-        <radialGradient id="gemGlow" cx="50%" cy="48%" r="55%">
-          <stop offset="0%"  stop-color="var(--accent)" stop-opacity=".95"/>
-          <stop offset="45%" stop-color="var(--accent)" stop-opacity=".28"/>
-          <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
-        </radialGradient>
-        <linearGradient id="gemFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%"  stop-color="#ffffff" stop-opacity=".85"/>
-          <stop offset="45%" stop-color="var(--accent)" stop-opacity=".5"/>
-          <stop offset="100%" stop-color="var(--accent)" stop-opacity=".18"/>
-        </linearGradient>
+        <filter id="yyglow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="var(--accent)" flood-opacity=".8"/>
+        </filter>
       </defs>
-
-      <!-- circuit traces + energy pulses (generated) -->
-      <g id="traces" fill="none" stroke="var(--accent)" stroke-width="2.3" opacity=".55"></g>
-      <g id="pads" fill="var(--accent)" opacity=".65"></g>
-      <g id="pulses" fill="var(--accent)"></g>
-
-      <!-- CPU chip -->
-      <g id="chip">
-        <rect x="150" y="212" width="100" height="62" rx="4"
-              fill="rgba(6,14,20,.92)" stroke="var(--accent)" stroke-width="1.6"/>
-        <rect x="166" y="226" width="68" height="34" fill="none"
-              stroke="var(--accent)" stroke-width="1" opacity=".5"/>
-        <g id="pins" stroke="var(--accent)" stroke-width="1.4" opacity=".7"></g>
+      <g id="yyspin">
+        <circle cx="200" cy="200" r="150" fill="#eef7f9"/>
+        <path d="M200 50 A150 150 0 0 1 200 350 A75 75 0 0 1 200 200 A75 75 0 0 0 200 50 Z"
+              fill="#0b1a24"/>
+        <circle cx="200" cy="125" r="26" fill="#0b1a24"/>
+        <circle cx="200" cy="275" r="26" fill="#eef7f9"/>
       </g>
-
-      <!-- glow behind the gem -->
-      <circle id="glow" cx="200" cy="188" r="90" fill="url(#gemGlow)"/>
-
-      <!-- faceted diamond -->
-      <g id="gem">
-        <polygon points="172,150 228,150 260,178 200,236 140,178"
-                 fill="url(#gemFill)" stroke="var(--accent)" stroke-width="2"/>
-        <g id="facets" stroke="var(--accent)" stroke-width="1" opacity=".7" fill="none">
-          <line x1="140" y1="178" x2="260" y2="178"/>
-          <line x1="172" y1="150" x2="140" y2="178"/>
-          <line x1="228" y1="150" x2="260" y2="178"/>
-          <line x1="172" y1="150" x2="172" y2="178"/>
-          <line x1="228" y1="150" x2="228" y2="178"/>
-          <line x1="172" y1="150" x2="200" y2="178"/>
-          <line x1="228" y1="150" x2="200" y2="178"/>
-          <line x1="140" y1="178" x2="200" y2="236"/>
-          <line x1="260" y1="178" x2="200" y2="236"/>
-          <line x1="172" y1="178" x2="200" y2="236"/>
-          <line x1="228" y1="178" x2="200" y2="236"/>
-          <line x1="200" y1="178" x2="200" y2="236"/>
-        </g>
-        <circle id="sparkle" cx="200" cy="176" r="4" fill="#ffffff" opacity="0"/>
-      </g>
+      <circle cx="200" cy="200" r="150" fill="none" stroke="var(--accent)"
+              stroke-width="3" filter="url(#yyglow)" opacity=".85"/>
     </svg>
-    <div id="gem3d"></div>
-    </div>
     <div class="statusword" id="statusword">STANDBY</div>
     <div class="subword" id="subword">awaiting "Jarvis"</div>
   </div>
@@ -251,132 +213,28 @@ Object.entries(THEMES).forEach(([n,[a]])=>{
 });
 applyTheme(localStorage.getItem("jarvisTheme")||"cyan");
 
-/* ---------- build circuit traces + energy pulses ---------- */
-const SVGNS="http://www.w3.org/2000/svg";
-const tracesG=$("traces"), padsG=$("pads"), pulsesG=$("pulses"), pinsG=$("pins");
-const glow=$("glow"), facets=$("facets"), sparkle=$("sparkle");
-
-// CPU pins along top & bottom edges of the chip
-for(let i=0;i<9;i++){
-  const x=158+i*10.5;
-  for(const [y,dy] of [[212,-8],[274,8]]){
-    const l=document.createElementNS(SVGNS,"line");
-    l.setAttribute("x1",x);l.setAttribute("y1",y);l.setAttribute("x2",x);l.setAttribute("y2",y+dy);
-    pinsG.appendChild(l);
-  }
-}
-
-// traces radiate from the chip edge outward (manhattan routing), ending at pads
-const TRACES=[];
-function addTrace(sx,sy,sign){
-  const midx=Math.round(sx+sign*(24+Math.random()*48));
-  const y2=Math.round(Math.max(22,Math.min(378, sy+(Math.random()-0.5)*230)));
-  const edgeX=sign>0?396:4;
-  const d=`M${sx} ${sy} H${midx} V${y2} H${edgeX}`;
-  const p=document.createElementNS(SVGNS,"path");
-  p.setAttribute("d",d);tracesG.appendChild(p);
-  TRACES.push({p,len:p.getTotalLength()});
-  for(const [px,py] of [[midx,y2],[edgeX,y2]]){
-    const r=document.createElementNS(SVGNS,"rect");
-    r.setAttribute("x",px-2.5);r.setAttribute("y",py-2.5);
-    r.setAttribute("width",6);r.setAttribute("height",6);padsG.appendChild(r);
-  }
-}
-for(let i=0;i<6;i++){ addTrace(150,216+i*10,-1); addTrace(250,216+i*10,1); }
-addTrace(172,212,-1); addTrace(200,212,-1); addTrace(228,212,1);
-addTrace(178,274,-1); addTrace(200,274,1); addTrace(222,274,1);
-
-// energy pulses that travel along the traces
-const PULSES=[];
-TRACES.forEach((t,i)=>{
-  for(let k=0;k<1+(i%2);k++){
-    const c=document.createElementNS(SVGNS,"circle");
-    c.setAttribute("r",3.6);pulsesG.appendChild(c);
-    PULSES.push({t,el:c,p:Math.random()});
-  }
-});
-
-/* ---------- reaction to status ----------
-   flow: -1 = pumping INWARD to the jewel (asking), +1 = radiating out (answering)
-   charge: how brightly the diamond shines                                        */
+/* ---------- rotating yin-yang (meditative, gradual speed variation) ---------- */
+const yyspin=$("yyspin");
+// status only gently nudges the base meditative speed
 const FEEL={
-  starting:{charge:.4,flow:-1,speed:.28}, standby:{charge:.22,flow:-1,speed:.12},
-  listening:{charge:.55,flow:-1,speed:.5}, thinking:{charge:.85,flow:-1,speed:.9},
-  speaking:{charge:1,flow:1,speed:.55}, asleep:{charge:.05,flow:-1,speed:.04}, off:{charge:0,flow:0,speed:0},
+  starting:{boost:10}, standby:{boost:0}, listening:{boost:22},
+  thinking:{boost:60}, speaking:{boost:34}, asleep:{boost:-16}, off:{boost:-40},
 };
-let feel={charge:.22,flow:-1,speed:.12}, target=FEEL.standby, statusName="standby";
-let t0=performance.now();
+let target=FEEL.standby, statusName="standby";
+let angle=0, curBoost=0, phase=Math.random()*6.28, t0=performance.now();
 function anim(now){
   const dt=Math.min(.05,(now-t0)/1000); t0=now;
-  feel.charge+=(target.charge-feel.charge)*.06;
-  feel.speed +=(target.speed -feel.speed )*.10;
-  const flow=target.flow;
-
-  glow.setAttribute("opacity",(0.16+0.84*feel.charge).toFixed(3));
-  glow.setAttribute("r",(78+feel.charge*30).toFixed(1));
-  facets.setAttribute("opacity",(0.4+0.6*feel.charge).toFixed(2));
-  sparkle.setAttribute("opacity",(Math.max(0,feel.charge-0.6)*2.2).toFixed(2));
-  sparkle.setAttribute("r",(3+feel.charge*6).toFixed(1));
-
-  const intensity=0.45+0.55*feel.charge;
-  for(const pu of PULSES){
-    if(flow===0){pu.el.setAttribute("opacity",0);continue;}
-    pu.p += flow*feel.speed*dt;
-    if(pu.p>1)pu.p-=1; if(pu.p<0)pu.p+=1;
-    const pt=pu.t.p.getPointAtLength(pu.p*pu.t.len);  // p=0 at chip/gem, 1 at edge
-    pu.el.setAttribute("cx",pt.x.toFixed(1));
-    pu.el.setAttribute("cy",pt.y.toFixed(1));
-    pu.el.setAttribute("opacity",((0.15+0.85*(1-pu.p))*intensity).toFixed(3));
-  }
+  // hypnotic swell: base speed breathes slowly between ~14 and ~58 deg/sec
+  phase += dt*0.16;
+  const swell = 0.5 + 0.5*Math.sin(phase);
+  const base = 14 + swell*44;
+  curBoost += ((target.boost||0) - curBoost)*0.05;   // ease status influence
+  const speed = Math.max(0, base + curBoost);         // never reverses
+  angle = (angle + speed*dt) % 360;
+  yyspin.setAttribute("transform", `rotate(${angle.toFixed(2)} 200 200)`);
   requestAnimationFrame(anim);
 }
 requestAnimationFrame(anim);
-
-/* ---------- optional 3D diamond (Three.js from CDN; 2D gem is the fallback) ---------- */
-function accentHex(){return getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()||"#37d0e6";}
-(function load3D(){
-  const s=document.createElement("script");
-  s.src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js";
-  s.onload=init3D;
-  s.onerror=()=>console.log("[jarvis] 3D gem unavailable (offline) — using 2D diamond");
-  document.head.appendChild(s);
-})();
-function init3D(){
-  const host=$("gem3d");
-  if(!window.THREE||!host){return;}
-  $("gem").style.display="none"; // hide the flat gem; 3D takes over
-  const scene=new THREE.Scene();
-  const cam=new THREE.PerspectiveCamera(40,1,0.1,100); cam.position.set(0,0,4.5);
-  const renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
-  const size=()=>{const w=host.clientWidth||280;renderer.setSize(w,w);};
-  host.appendChild(renderer.domElement); size();
-
-  const col=new THREE.Color(accentHex());
-  const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:.3,
-    metalness:.45,roughness:.12,flatShading:true,transparent:true,opacity:.94});
-  const gem=new THREE.Group();
-  const crown=new THREE.Mesh(new THREE.CylinderGeometry(0.55,1,0.42,8),mat); crown.position.y=0.56;
-  const pav=new THREE.Mesh(new THREE.ConeGeometry(1,1.3,8),mat); pav.rotation.x=Math.PI; pav.position.y=-0.29;
-  gem.add(crown,pav); gem.rotation.x=0.35; scene.add(gem);
-
-  scene.add(new THREE.AmbientLight(0xffffff,.55));
-  const pl=new THREE.PointLight(0xffffff,1.1); pl.position.set(3,4,5); scene.add(pl);
-  const pl2=new THREE.PointLight(col.getHex(),1.5); pl2.position.set(-4,-2,4); scene.add(pl2);
-
-  window._recolorGem=()=>{const c=new THREE.Color(accentHex());mat.color.copy(c);mat.emissive.copy(c);pl2.color.copy(c);};
-  new ResizeObserver(size).observe(host);
-
-  (function loop(){
-    const c=(typeof feel!=="undefined")?feel.charge:0.3;
-    gem.rotation.y+=0.006+c*0.03;
-    gem.rotation.x=0.35+Math.sin(performance.now()/2200)*0.08;
-    mat.emissiveIntensity=0.2+c*0.9;
-    gem.scale.setScalar(1+c*0.06);
-    renderer.render(scene,cam);
-    requestAnimationFrame(loop);
-  })();
-}
 
 /* ---------- controls ---------- */
 $("fsBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
