@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.7"
+VERSION = "2.8"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -1228,6 +1228,11 @@ def main() -> None:
     print("=" * 56)
     log_event("system", banner)
 
+    try:
+        import jarvis_tasks as tasks
+    except Exception:
+        tasks = None
+
     history: list[tuple[str, str]] = []
     set_status("standby")
     log_event("system", "All systems online — awaiting command")
@@ -1265,6 +1270,14 @@ def main() -> None:
             asleep = False
             pending_listen = False  # set after a barge-in: skip the wake word
             while True:
+                # proactive reminders (announced between listen cycles)
+                if tasks and tts:
+                    for r in tasks.pop_due_reminders():
+                        set_status("speaking")
+                        speak(tts, f"Reminder, sir: {r}.", args.voice)
+                        log_event("system", f"Reminder fired: {r}")
+                    set_status("standby")
+
                 after, heard = "", ""
                 if pending_listen:
                     pending_listen = False  # barge-in -> record a command below
@@ -1359,6 +1372,24 @@ def main() -> None:
                     set_status("standby")
                     print("[voice] Listening...")
                     continue
+
+                # task / lifestyle manager (to-dos, reminders, the day's plan)
+                if tasks and tasks.looks_like_task(text):
+                    set_status("thinking")
+                    try:
+                        reply = tasks.handle(text, lambda p: jarvis.ask(p))
+                    except Exception as exc:
+                        print(f"[voice] Task error: {exc}")
+                        reply = None
+                    if reply:
+                        print(f"Jarvis (tasks): {reply}")
+                        STATE["last_reply"] = reply
+                        log_event("jarvis", reply)
+                        set_status("speaking")
+                        if tts:
+                            speak(tts, reply, args.voice)
+                        set_status("standby")
+                        continue
 
                 if is_sleep_command(text):
                     asleep = True
