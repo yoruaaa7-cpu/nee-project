@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.8"
+VERSION = "2.9"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -200,6 +200,29 @@ STATE: dict = {
 }
 
 
+# Set in main(): a thread-safe callable(text)->reply used by the phone API.
+RUNTIME: dict = {}
+API_LOCK = threading.Lock()
+
+
+def api_token() -> str:
+    """A stable per-machine token guarding the phone API (stored locally)."""
+    p = (
+        pathlib.Path(os.environ.get("LOCALAPPDATA", str(pathlib.Path.home())))
+        / "OpenJarvis" / "api_token.txt"
+    )
+    try:
+        if p.exists():
+            return p.read_text(encoding="utf-8").strip()
+        import secrets
+        tok = secrets.token_urlsafe(15)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(tok, encoding="utf-8")
+        return tok
+    except Exception:
+        return "jarvis"
+
+
 def set_status(status: str) -> None:
     STATE["status"] = status
 
@@ -211,10 +234,11 @@ def log_event(kind: str, text: str) -> None:
     del STATE["log"][:-40]
 
 
-def start_dashboard(port: int) -> None:
+def start_dashboard(port: int, host: str = "127.0.0.1", token: str = "") -> None:
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
     page_path = pathlib.Path(__file__).with_name("jarvis_dashboard.html")
+    mobile_path = pathlib.Path(__file__).with_name("jarvis_mobile.html")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # silence request spam
@@ -244,17 +268,43 @@ def start_dashboard(port: int) -> None:
                 STATE["active_project"] = get_active_project()
                 STATE["uptime_s"] = int(time.time() - STATE["started_at"])
                 self._send(200, "application/json", json.dumps(STATE).encode())
+            elif self.path.startswith("/m") and mobile_path.exists():
+                # phone chat page — token injected so the app "just works"
+                html = mobile_path.read_text(encoding="utf-8").replace("__TOKEN__", token)
+                self._send(200, "text/html; charset=utf-8", html.encode())
             elif page_path.exists():
                 self._send(200, "text/html; charset=utf-8", page_path.read_bytes())
             else:
-                self._send(
-                    404,
-                    "text/plain",
-                    b"jarvis_dashboard.html not found next to voice_jarvis.py",
-                )
+                self._send(404, "text/plain", b"jarvis_dashboard.html not found")
+
+        def do_POST(self):
+            if not self.path.startswith("/ask"):
+                self._send(404, "text/plain", b"not found")
+                return
+            auth = self.headers.get("Authorization", "")
+            if token and auth != f"Bearer {token}":
+                self._send(401, "application/json", b'{"error":"unauthorized"}')
+                return
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                body = json.loads(self.rfile.read(n) or b"{}")
+                text = (body.get("text") or "").strip()
+            except Exception:
+                self._send(400, "application/json", b'{"error":"bad request"}')
+                return
+            fn = RUNTIME.get("process")
+            if not fn or not text:
+                self._send(503, "application/json", b'{"error":"not ready"}')
+                return
+            try:
+                reply = fn(text)
+            except Exception as exc:
+                reply = f"Error: {exc}"
+            self._send(200, "application/json",
+                       json.dumps({"reply": reply}).encode())
 
     try:
-        server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        server = ThreadingHTTPServer((host, port), Handler)
         threading.Thread(target=server.serve_forever, daemon=True).start()
         print(f"[voice] Dashboard live at http://localhost:{port}")
     except OSError as exc:
@@ -1098,6 +1148,12 @@ def main() -> None:
         help="Port for the local dashboard (0 disables it)",
     )
     parser.add_argument(
+        "--remote",
+        action="store_true",
+        help="Expose the dashboard/API on the network (0.0.0.0) so your phone "
+        "and iPad can reach Jarvis. Use only on a private network/Tailscale.",
+    )
+    parser.add_argument(
         "--browser",
         action="store_true",
         help="Enable browser control (persistent, logged-in Chrome profile)",
@@ -1168,8 +1224,14 @@ def main() -> None:
     if active:
         print(f"[voice] Active project: {active}")
 
+    token = api_token()
     if args.dashboard_port:
-        start_dashboard(args.dashboard_port)
+        host = "0.0.0.0" if args.remote else "127.0.0.1"
+        start_dashboard(args.dashboard_port, host=host, token=token)
+        if args.remote:
+            print("[voice] Remote access ON — phone/iPad can reach Jarvis.")
+            print(f"        Open on your device:  http://<this-pc-ip>:{args.dashboard_port}/m")
+            print(f"        Access token: {token}")
     start_stop_hotkey()
     STATE["voice"] = args.voice
     log_event("system", "Boot sequence started")
@@ -1234,6 +1296,27 @@ def main() -> None:
         tasks = None
 
     history: list[tuple[str, str]] = []
+
+    # Text pipeline shared by the phone API (POST /ask). Serialized so a
+    # remote request and the voice loop never run the agent at once.
+    def process_text(text: str) -> str:
+        with API_LOCK:
+            STATE["last_command"] = text
+            log_event("user", f"(phone) {text}")
+            if tasks and tasks.looks_like_task(text):
+                r = tasks.handle(text, lambda p: jarvis.ask(p))
+                if r:
+                    STATE["last_reply"] = r
+                    log_event("jarvis", r)
+                    return r
+            reply = ask_jarvis(jarvis, history, text, use_tools=not args.no_tools)
+            history.append((text, reply))
+            STATE["last_reply"] = reply
+            log_event("jarvis", reply)
+            return reply
+
+    RUNTIME["process"] = process_text
+
     set_status("standby")
     log_event("system", "All systems online — awaiting command")
 
