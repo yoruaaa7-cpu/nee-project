@@ -56,9 +56,7 @@
   .col{display:flex;flex-direction:column;gap:14px;grid-row:2/4;min-height:0}
   .center{grid-column:2;grid-row:2/4;position:relative;display:flex;
     flex-direction:column;align-items:center;justify-content:center}
-  .yydesc{max-width:540px;text-align:center;color:var(--muted);font-size:12px;
-    letter-spacing:1px;line-height:1.7;margin-bottom:18px;font-style:italic}
-  #yy{filter:drop-shadow(0 0 30px color-mix(in srgb,var(--accent) 25%,transparent))}
+  #core{width:min(70vh,820px);max-width:100%;aspect-ratio:1;display:block}
 
   .meter{margin:10px 0}
   .meter label{display:flex;justify-content:space-between;font-size:11px;letter-spacing:1px;color:var(--muted);margin-bottom:5px}
@@ -144,22 +142,7 @@
   </div>
 
   <div class="center">
-    <svg id="yy" viewBox="0 0 400 400" width="min(66vh,760px)" style="max-width:100%">
-      <defs>
-        <filter id="yyglow" x="-30%" y="-30%" width="160%" height="160%">
-          <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="var(--accent)" flood-opacity=".8"/>
-        </filter>
-      </defs>
-      <g id="yyspin">
-        <circle cx="200" cy="200" r="150" fill="#eef7f9"/>
-        <path d="M200 50 A150 150 0 0 1 200 350 A75 75 0 0 1 200 200 A75 75 0 0 0 200 50 Z"
-              fill="#0b1a24"/>
-        <circle cx="200" cy="125" r="26" fill="#0b1a24"/>
-        <circle cx="200" cy="275" r="26" fill="#eef7f9"/>
-      </g>
-      <circle cx="200" cy="200" r="150" fill="none" stroke="var(--accent)"
-              stroke-width="3" filter="url(#yyglow)" opacity=".85"/>
-    </svg>
+    <canvas id="core"></canvas>
     <div class="statusword" id="statusword">STANDBY</div>
     <div class="subword" id="subword">awaiting "Jarvis"</div>
   </div>
@@ -211,28 +194,111 @@ Object.entries(THEMES).forEach(([n,[a]])=>{
 });
 applyTheme(localStorage.getItem("jarvisTheme")||"cyan");
 
-/* ---------- rotating yin-yang (meditative, gradual speed variation) ---------- */
-const yyspin=$("yyspin");
-// status only gently nudges the base meditative speed
-const FEEL={
-  starting:{boost:10}, standby:{boost:0}, listening:{boost:22},
-  thinking:{boost:60}, speaking:{boost:34}, asleep:{boost:-16}, off:{boost:-40},
-};
-let target=FEEL.standby, statusName="standby";
-let angle=0, curBoost=0, phase=Math.random()*6.28, t0=performance.now();
-function anim(now){
-  const dt=Math.min(.05,(now-t0)/1000); t0=now;
-  // hypnotic swell: base speed breathes slowly between ~14 and ~58 deg/sec
-  phase += dt*0.16;
-  const swell = 0.5 + 0.5*Math.sin(phase);
-  const base = 14 + swell*44;
-  curBoost += ((target.boost||0) - curBoost)*0.05;   // ease status influence
-  const speed = Math.max(0, base + curBoost);         // never reverses
-  angle = (angle + speed*dt) % 360;
-  yyspin.setAttribute("transform", `rotate(${angle.toFixed(2)} 200 200)`);
-  requestAnimationFrame(anim);
+/* ---------- reactive neural / heartbeat core ---------- */
+const cv = $("core"), cx = cv.getContext("2d");
+let W = 0, H = 0, DPR = Math.min(window.devicePixelRatio || 1, 2);
+function resizeCore(){
+  const r = cv.getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cx.setTransform(DPR,0,0,DPR,0,0);
 }
-requestAnimationFrame(anim);
+new ResizeObserver(resizeCore).observe(cv);
+window.addEventListener("resize", resizeCore); resizeCore();
+
+// status -> feel of the core (heartbeat rate, colour, firing, ring strength)
+const FEEL = {
+  starting:{bpm:70, rgb:[55,208,230], fire:.3, ring:.6},
+  standby: {bpm:56, rgb:[55,208,230], fire:.25,ring:.5},
+  listening:{bpm:92,rgb:[120,232,255],fire:.5, ring:1.2},
+  thinking:{bpm:138,rgb:[255,180,58], fire:1.0, ring:1.0},
+  speaking:{bpm:108,rgb:[55,230,160], fire:.7, ring:1.4},
+  asleep:  {bpm:26, rgb:[36,96,130],  fire:.08,ring:.2},
+  off:     {bpm:0,  rgb:[90,92,104],  fire:0,  ring:0},
+};
+let cur = {...FEEL.standby, rgb:[...FEEL.standby.rgb]};
+let target = FEEL.standby;
+let statusName = "standby";
+
+const N = 190, nodes = [];
+for(let i=0;i<N;i++){
+  const y = 1 - (i/(N-1))*2, rad = Math.sqrt(1-y*y), theta = i*2.399963;
+  nodes.push({x:Math.cos(theta)*rad, y, z:Math.sin(theta)*rad, f:Math.random()});
+}
+const rings = [];
+let beatPhase = 0, lastBeat = -1, t0 = performance.now();
+function heartbeat(x){ // lub-dub curve
+  const a = Math.exp(-Math.pow((x-0.10)/0.045,2));
+  const b = 0.55*Math.exp(-Math.pow((x-0.26)/0.055,2));
+  return Math.min(1, a+b);
+}
+const lerp=(a,b,k)=>a+(b-a)*k;
+const rgb=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+
+function frame(now){
+  const dt = Math.min(0.05,(now - t0)/1000); t0 = now;
+  cur.bpm = lerp(cur.bpm, target.bpm, .05);
+  cur.fire = lerp(cur.fire, target.fire, .05);
+  cur.ring = lerp(cur.ring, target.ring, .05);
+  for(let i=0;i<3;i++) cur.rgb[i] = lerp(cur.rgb[i], target.rgb[i], .05);
+
+  cx.clearRect(0,0,W,H);
+  const cxp=W/2, cyp=H/2, base=Math.min(W,H)*0.16;
+
+  let beat=0;
+  if(cur.bpm>1){
+    beatPhase = (beatPhase + dt/(60/cur.bpm)) % 1;
+    beat = heartbeat(beatPhase);
+    if(beatPhase < lastBeat) rings.push({r:base*0.9, a:0.5*cur.ring});
+    lastBeat = beatPhase;
+  }
+  for(let i=rings.length-1;i>=0;i--){
+    const rg=rings[i];
+    rg.r += (Math.min(W,H)*0.35)*dt; rg.a -= 0.35*dt;
+    if(rg.a<=0){ rings.splice(i,1); continue; }
+    cx.beginPath(); cx.arc(cxp,cyp,rg.r,0,7);
+    cx.strokeStyle=rgb(cur.rgb,rg.a); cx.lineWidth=1.5; cx.stroke();
+  }
+  const rot=now/2600, cosR=Math.cos(rot), sinR=Math.sin(rot);
+  const R=Math.min(W,H)*0.30, pts=[];
+  for(const n of nodes){
+    const x = n.x*cosR - n.z*sinR, z = n.x*sinR + n.z*cosR, depth=(z+1)/2;
+    n.f = Math.max(0,Math.min(1, n.f + (Math.random()-0.5)*cur.fire*0.15));
+    pts.push({sx:cxp+x*R, sy:cyp+n.y*R*0.92, depth, f:n.f});
+  }
+  cx.lineWidth=1;
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    for(let j=i+1;j<i+6 && j<pts.length;j++){
+      const q=pts[j], dx=p.sx-q.sx, dy=p.sy-q.sy, d2=dx*dx+dy*dy;
+      if(d2 < (R*0.28)*(R*0.28)){
+        const a=(1-Math.sqrt(d2)/(R*0.28))*0.18*((p.depth+q.depth)/2);
+        cx.strokeStyle=rgb(cur.rgb,a);
+        cx.beginPath(); cx.moveTo(p.sx,p.sy); cx.lineTo(q.sx,q.sy); cx.stroke();
+      }
+    }
+  }
+  for(const p of pts){
+    const glow=0.25+0.75*p.f, size=(0.7+p.depth*1.8)*(0.8+beat*0.5);
+    cx.fillStyle=rgb(cur.rgb, (0.2+0.8*p.depth)*glow);
+    cx.beginPath(); cx.arc(p.sx,p.sy,size,0,7); cx.fill();
+  }
+  const rCore = base*(0.75 + beat*0.42);
+  const g=cx.createRadialGradient(cxp,cyp,0,cxp,cyp,rCore);
+  g.addColorStop(0, rgb(cur.rgb, 0.95));
+  g.addColorStop(0.4, rgb(cur.rgb, 0.5));
+  g.addColorStop(1, rgb(cur.rgb, 0));
+  cx.fillStyle=g; cx.beginPath(); cx.arc(cxp,cyp,rCore,0,7); cx.fill();
+  cx.fillStyle=rgb([Math.min(255,cur.rgb[0]+90),Math.min(255,cur.rgb[1]+90),Math.min(255,cur.rgb[2]+90)], 0.6+beat*0.4);
+  cx.beginPath(); cx.arc(cxp,cyp,base*0.28*(0.9+beat*0.3),0,7); cx.fill();
+  cx.strokeStyle=rgb(cur.rgb,0.12); cx.lineWidth=1;
+  cx.beginPath();
+  cx.moveTo(cxp-R,cyp); cx.lineTo(cxp+R,cyp);
+  cx.moveTo(cxp,cyp-R); cx.lineTo(cxp,cyp+R); cx.stroke();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 
 /* ---------- controls ---------- */
 $("fsBtn").onclick=()=>document.fullscreenElement?document.exitFullscreen():document.documentElement.requestFullscreen();
