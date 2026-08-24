@@ -31,9 +31,18 @@ function Get-JarvisProcess {
 }
 
 function Stop-Jarvis {
-    Get-JarvisProcess | ForEach-Object {
-        Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    }
+    # stop the voice backend AND the desktop widget window
+    Get-CimInstance Win32_Process -Filter "Name = 'python.exe'" |
+        Where-Object { $_.CommandLine -like "*voice_jarvis.py*" -or $_.CommandLine -like "*jarvis_widget.py*" } |
+        ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+}
+
+function Start-Widget {
+    # frameless always-on-top desktop panel (separate GUI process); waits for
+    # the backend's dashboard server to come up first
+    $wcmd = "Start-Sleep -Seconds 12; Set-Location '$SrcDir'; uv run python jarvis_widget.py"
+    Start-Process -FilePath "powershell.exe" -WindowStyle Hidden `
+        -ArgumentList "-NoProfile", "-Command", $wcmd
 }
 
 function New-LauncherFile {
@@ -54,7 +63,8 @@ function Start-Jarvis {
         return
     }
     Start-Process -FilePath "wscript.exe" -ArgumentList "`"$Launcher`""
-    Write-Host "[ok]   Started (hidden). Give it ~30s to load models, then say 'Hey Jarvis'." -ForegroundColor Green
+    Start-Widget
+    Write-Host "[ok]   Started (hidden). The Jarvis panel appears on the side in ~15s." -ForegroundColor Green
     Write-Host "       Log: $LogFile"
 }
 

@@ -1,0 +1,68 @@
+"""Jarvis desktop widget — a frameless, always-on-top mini-panel docked to the
+side of the screen, showing the live heartbeat core + status. No browser tab.
+
+Runs as its own small process (the voice backend stays hidden). It just points
+a native webview at the local dashboard's /widget page.
+
+    uv pip install pywebview
+    uv run python jarvis_widget.py            # right-docked
+    uv run python jarvis_widget.py --side left
+    uv run python jarvis_widget.py --width 360 --height 560
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+
+
+def screen_size() -> tuple[int, int]:
+    if sys.platform == "win32":
+        import ctypes
+
+        u = ctypes.windll.user32
+        try:
+            u.SetProcessDPIAware()
+        except Exception:
+            pass
+        return int(u.GetSystemMetrics(0)), int(u.GetSystemMetrics(1))
+    return 1920, 1080
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--port", type=int, default=8765)
+    ap.add_argument("--width", type=int, default=340)
+    ap.add_argument("--height", type=int, default=560)
+    ap.add_argument("--side", choices=["right", "left"], default="right")
+    ap.add_argument("--margin", type=int, default=24)
+    args = ap.parse_args()
+
+    try:
+        import webview
+    except Exception:
+        print("[widget] pywebview not installed. Run:  uv pip install pywebview")
+        sys.exit(1)
+
+    sw, sh = screen_size()
+    y = max(40, (sh - args.height) // 2 - 40)
+    x = (sw - args.width - args.margin) if args.side == "right" else args.margin
+
+    webview.create_window(
+        "Jarvis",
+        url=f"http://localhost:{args.port}/widget",
+        width=args.width,
+        height=args.height,
+        x=x,
+        y=y,
+        frameless=True,
+        easy_drag=True,
+        on_top=True,
+        resizable=True,
+        background_color="#04080e",
+    )
+    webview.start()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jarvis</title>
+<style>
+  :root{--accent:#37d0e6;--bg:#04080e;--muted:#5a8894;--text:#cdeef4}
+  *{box-sizing:border-box;margin:0;-webkit-user-select:none;user-select:none}
+  html,body{height:100%;background:var(--bg);color:var(--text);
+    font-family:"Consolas","SF Mono",ui-monospace,monospace;overflow:hidden}
+  .wrap{height:100vh;display:flex;flex-direction:column;
+    border:1px solid rgba(55,208,230,.28);border-radius:14px;overflow:hidden;
+    background:radial-gradient(120% 80% at 50% 30%,rgba(55,208,230,.06),transparent 70%),var(--bg)}
+  .bar{-webkit-app-region:drag;display:flex;align-items:center;justify-content:space-between;
+    padding:9px 12px;border-bottom:1px solid rgba(55,208,230,.16);cursor:move}
+  .bar h1{font-size:14px;letter-spacing:6px;color:var(--accent);text-shadow:0 0 12px rgba(55,208,230,.5)}
+  .bar .dot{width:7px;height:7px;border-radius:50%;background:#37e69a;box-shadow:0 0 8px #37e69a}
+  #core{flex:1;width:100%;display:block;min-height:0}
+  .status{text-align:center;font-size:14px;letter-spacing:5px;color:var(--accent);
+    text-transform:uppercase;padding:2px 0 2px;text-shadow:0 0 12px rgba(55,208,230,.5)}
+  .sub{text-align:center;font-size:9px;letter-spacing:2px;color:var(--muted);padding-bottom:6px}
+  .tape{border-top:1px solid rgba(55,208,230,.16);padding:8px 12px 12px;font-size:11px;line-height:1.4}
+  .tape .k{color:var(--muted);font-size:9px;letter-spacing:1px}
+  .tape .cmd{color:#fff;margin:1px 0 6px;max-height:2.6em;overflow:hidden}
+  .tape .rep{color:var(--accent);max-height:4.2em;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar"><h1>JARVIS</h1><span class="dot" id="dot"></span></div>
+  <canvas id="core"></canvas>
+  <div class="status" id="status">STANDBY</div>
+  <div class="sub" id="sub">awaiting "Jarvis"</div>
+  <div class="tape">
+    <div class="k">&gt; YOU</div><div class="cmd" id="cmd">—</div>
+    <div class="k">&gt; JARVIS</div><div class="rep" id="rep">—</div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const cv=$("core"),cx=cv.getContext("2d");let W=0,H=0,DPR=Math.min(devicePixelRatio||1,2);
+function rs(){const r=cv.getBoundingClientRect();W=r.width;H=r.height;cv.width=W*DPR;cv.height=H*DPR;cx.setTransform(DPR,0,0,DPR,0,0);}
+new ResizeObserver(rs).observe(cv);addEventListener("resize",rs);rs();
+const FEEL={starting:{bpm:70,rgb:[55,208,230],fire:.3,ring:.6},standby:{bpm:56,rgb:[55,208,230],fire:.25,ring:.5},
+ listening:{bpm:92,rgb:[120,232,255],fire:.5,ring:1.2},thinking:{bpm:138,rgb:[255,180,58],fire:1,ring:1},
+ speaking:{bpm:108,rgb:[55,230,160],fire:.7,ring:1.4},asleep:{bpm:26,rgb:[36,96,130],fire:.08,ring:.2},off:{bpm:0,rgb:[90,92,104],fire:0,ring:0}};
+let cur={...FEEL.standby,rgb:[...FEEL.standby.rgb]},target=FEEL.standby,statusName="standby";
+const N=120,nodes=[];for(let i=0;i<N;i++){const y=1-(i/(N-1))*2,rad=Math.sqrt(1-y*y),th=i*2.399963;
+ nodes.push({x:Math.cos(th)*rad,y,z:Math.sin(th)*rad,f:Math.random()});}
+const rings=[];let bp=0,lb=-1,t0=performance.now();
+const hb=x=>Math.min(1,Math.exp(-Math.pow((x-.1)/.045,2))+.55*Math.exp(-Math.pow((x-.26)/.055,2)));
+const lp=(a,b,k)=>a+(b-a)*k,rgb=(c,a)=>`rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+function frame(now){const dt=Math.min(.05,(now-t0)/1000);t0=now;
+ cur.bpm=lp(cur.bpm,target.bpm,.05);cur.fire=lp(cur.fire,target.fire,.05);cur.ring=lp(cur.ring,target.ring,.05);
+ for(let i=0;i<3;i++)cur.rgb[i]=lp(cur.rgb[i],target.rgb[i],.05);
+ cx.clearRect(0,0,W,H);const cxp=W/2,cyp=H/2,base=Math.min(W,H)*.17;let beat=0;
+ if(cur.bpm>1){bp=(bp+dt/(60/cur.bpm))%1;beat=hb(bp);if(bp<lb)rings.push({r:base*.9,a:.5*cur.ring});lb=bp;}
+ for(let i=rings.length-1;i>=0;i--){const g=rings[i];g.r+=Math.min(W,H)*.35*dt;g.a-=.35*dt;
+  if(g.a<=0){rings.splice(i,1);continue;}cx.beginPath();cx.arc(cxp,cyp,g.r,0,7);cx.strokeStyle=rgb(cur.rgb,g.a);cx.lineWidth=1.3;cx.stroke();}
+ const rot=now/2600,cr=Math.cos(rot),sr=Math.sin(rot),R=Math.min(W,H)*.31,pts=[];
+ for(const n of nodes){const x=n.x*cr-n.z*sr,z=n.x*sr+n.z*cr,d=(z+1)/2;
+  n.f=Math.max(0,Math.min(1,n.f+(Math.random()-.5)*cur.fire*.15));pts.push({sx:cxp+x*R,sy:cyp+n.y*R*.92,d,f:n.f});}
+ cx.lineWidth=1;for(let i=0;i<pts.length;i++){const p=pts[i];for(let j=i+1;j<i+6&&j<pts.length;j++){const q=pts[j],dx=p.sx-q.sx,dy=p.sy-q.sy,d2=dx*dx+dy*dy;
+  if(d2<(R*.28)*(R*.28)){const a=(1-Math.sqrt(d2)/(R*.28))*.18*((p.d+q.d)/2);cx.strokeStyle=rgb(cur.rgb,a);cx.beginPath();cx.moveTo(p.sx,p.sy);cx.lineTo(q.sx,q.sy);cx.stroke();}}}
+ for(const p of pts){const gl=.25+.75*p.f,s=(.6+p.d*1.6)*(.8+beat*.5);cx.fillStyle=rgb(cur.rgb,(.2+.8*p.d)*gl);cx.beginPath();cx.arc(p.sx,p.sy,s,0,7);cx.fill();}
+ const rC=base*(.75+beat*.42),g=cx.createRadialGradient(cxp,cyp,0,cxp,cyp,rC);
+ g.addColorStop(0,rgb(cur.rgb,.95));g.addColorStop(.4,rgb(cur.rgb,.5));g.addColorStop(1,rgb(cur.rgb,0));
+ cx.fillStyle=g;cx.beginPath();cx.arc(cxp,cyp,rC,0,7);cx.fill();
+ cx.fillStyle=rgb([Math.min(255,cur.rgb[0]+90),Math.min(255,cur.rgb[1]+90),Math.min(255,cur.rgb[2]+90)],.6+beat*.4);
+ cx.beginPath();cx.arc(cxp,cyp,base*.28*(.9+beat*.3),0,7);cx.fill();
+ requestAnimationFrame(frame);}
+requestAnimationFrame(frame);
+const SUB={starting:"initializing",standby:'awaiting "Jarvis"',listening:"listening…",thinking:"processing",speaking:"responding",asleep:"dormant",off:"offline"};
+function esc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
+async function tick(){try{const s=await(await fetch("/state")).json();const st=s.status||"standby";
+  if(st!==statusName){statusName=st;target=FEEL[st]||FEEL.standby;}
+  $("status").textContent=st.toUpperCase();$("sub").textContent=SUB[st]||"";
+  $("cmd").innerHTML=esc(s.last_command)||"—";$("rep").innerHTML=esc(s.last_reply)||"—";
+  $("dot").style.background=st==="off"?"#e6a437":"#37e69a";
+ }catch(e){statusName="off";target=FEEL.off;$("status").textContent="OFFLINE";$("sub").textContent="starting…";}}
+tick();setInterval(tick,1000);
+</script>
+</body>
+</html>

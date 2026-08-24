@@ -42,7 +42,7 @@ import webbrowser
 warnings.filterwarnings("ignore")
 
 # Bump this whenever the script changes so you can confirm your copy is current.
-VERSION = "2.9"
+VERSION = "3.0"
 
 # Answer --version without loading the heavy audio/ML deps.
 if __name__ == "__main__" and "--version" in sys.argv:
@@ -239,6 +239,7 @@ def start_dashboard(port: int, host: str = "127.0.0.1", token: str = "") -> None
 
     page_path = pathlib.Path(__file__).with_name("jarvis_dashboard.html")
     mobile_path = pathlib.Path(__file__).with_name("jarvis_mobile.html")
+    widget_path = pathlib.Path(__file__).with_name("jarvis_widget.html")
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):  # silence request spam
@@ -268,6 +269,8 @@ def start_dashboard(port: int, host: str = "127.0.0.1", token: str = "") -> None
                 STATE["active_project"] = get_active_project()
                 STATE["uptime_s"] = int(time.time() - STATE["started_at"])
                 self._send(200, "application/json", json.dumps(STATE).encode())
+            elif self.path.startswith("/widget") and widget_path.exists():
+                self._send(200, "text/html; charset=utf-8", widget_path.read_bytes())
             elif self.path.startswith("/m") and mobile_path.exists():
                 # phone chat page — token injected so the app "just works"
                 html = mobile_path.read_text(encoding="utf-8").replace("__TOKEN__", token)
