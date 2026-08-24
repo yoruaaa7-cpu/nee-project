@@ -44,13 +44,27 @@ def main() -> None:
         print("[widget] pywebview not installed. Run:  uv pip install pywebview")
         sys.exit(1)
 
+    # Wait for the backend's web server to be reachable before opening the
+    # window — otherwise pywebview loads a blank/black page and never retries.
+    import time
+    import urllib.request
+
+    url = f"http://localhost:{args.port}/widget"
+    for _ in range(90):  # up to ~90s
+        try:
+            with urllib.request.urlopen(url, timeout=2) as r:
+                if r.status == 200:
+                    break
+        except Exception:
+            time.sleep(1)
+
     sw, sh = screen_size()
     y = max(40, (sh - args.height) // 2 - 40)
     x = (sw - args.width - args.margin) if args.side == "right" else args.margin
 
     webview.create_window(
         "Jarvis",
-        url=f"http://localhost:{args.port}/widget",
+        url=url,
         width=args.width,
         height=args.height,
         x=x,
