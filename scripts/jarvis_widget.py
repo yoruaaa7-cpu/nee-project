@@ -58,11 +58,13 @@ def main() -> None:
         except Exception:
             time.sleep(1)
 
+    # rough initial placement (ctypes) — refined after start using pywebview's
+    # own screen units so DPI scaling can't push it off to the wrong corner
     sw, sh = screen_size()
     y = max(40, (sh - args.height) // 2 - 40)
     x = (sw - args.width - args.margin) if args.side == "right" else args.margin
 
-    webview.create_window(
+    window = webview.create_window(
         "Jarvis",
         url=url,
         width=args.width,
@@ -75,7 +77,18 @@ def main() -> None:
         resizable=True,
         background_color="#04080e",
     )
-    webview.start()
+
+    def dock():
+        try:
+            scr = webview.screens[0]
+            sw2, sh2 = int(scr.width), int(scr.height)
+            nx = (sw2 - args.width - args.margin) if args.side == "right" else args.margin
+            ny = max(40, (sh2 - args.height) // 2 - 40)
+            window.move(nx, ny)
+        except Exception:
+            pass
+
+    webview.start(dock)
 
 
 if __name__ == "__main__":
