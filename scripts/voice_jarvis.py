@@ -269,6 +269,17 @@ def start_dashboard(port: int, host: str = "127.0.0.1", token: str = "") -> None
                 STATE["active_project"] = get_active_project()
                 STATE["uptime_s"] = int(time.time() - STATE["started_at"])
                 self._send(200, "application/json", json.dumps(STATE).encode())
+            elif self.path.startswith("/open"):
+                # widget "maximize": open the full dashboard in the default
+                # browser, done here in the backend process so the frameless
+                # widget's GUI thread is never involved (it froze otherwise).
+                try:
+                    import webbrowser
+
+                    webbrowser.open(f"http://localhost:{port}/")
+                except Exception:
+                    pass
+                self._send(200, "application/json", b'{"ok":true}')
             elif self.path.startswith("/widget") and widget_path.exists():
                 self._send(200, "text/html; charset=utf-8", widget_path.read_bytes())
             elif self.path.startswith("/m") and mobile_path.exists():
