@@ -58,19 +58,15 @@ def main() -> None:
         except Exception:
             time.sleep(1)
 
-    # rough initial placement (ctypes) — refined after start using pywebview's
-    # own screen units so DPI scaling can't push it off to the wrong corner
-    sw, sh = screen_size()
-    y = max(40, (sh - args.height) // 2 - 40)
-    x = (sw - args.width - args.margin) if args.side == "right" else args.margin
-
+    # Start at a guaranteed-visible spot; dock() refines to the right edge
+    # after start using pywebview's own screen units, clamped fully on-screen.
     window = webview.create_window(
         "Jarvis",
         url=url,
         width=args.width,
         height=args.height,
-        x=x,
-        y=y,
+        x=120,
+        y=120,
         frameless=True,
         easy_drag=True,
         on_top=True,
@@ -84,6 +80,9 @@ def main() -> None:
             sw2, sh2 = int(scr.width), int(scr.height)
             nx = (sw2 - args.width - args.margin) if args.side == "right" else args.margin
             ny = max(40, (sh2 - args.height) // 2 - 40)
+            # never let any part fall off the screen
+            nx = max(0, min(nx, sw2 - args.width))
+            ny = max(0, min(ny, sh2 - args.height))
             window.move(nx, ny)
         except Exception:
             pass
