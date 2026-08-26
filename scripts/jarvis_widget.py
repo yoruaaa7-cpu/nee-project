@@ -58,6 +58,30 @@ def main() -> None:
         except Exception:
             time.sleep(1)
 
+    class Api:
+        """Exposed to the widget page so its title-bar buttons can control
+        the frameless window (minimize / toggle always-on-top)."""
+
+        def __init__(self):
+            self.window = None
+            self.on_top = True
+
+        def minimize(self):
+            try:
+                self.window.minimize()
+            except Exception:
+                pass
+
+        def toggle_top(self):
+            self.on_top = not self.on_top
+            try:
+                self.window.on_top = self.on_top
+            except Exception:
+                pass
+            return self.on_top
+
+    api = Api()
+
     # Start at a guaranteed-visible spot; dock() refines to the right edge
     # after start using pywebview's own screen units, clamped fully on-screen.
     window = webview.create_window(
@@ -72,7 +96,9 @@ def main() -> None:
         on_top=True,
         resizable=True,
         background_color="#04080e",
+        js_api=api,
     )
+    api.window = window
 
     def dock():
         try:

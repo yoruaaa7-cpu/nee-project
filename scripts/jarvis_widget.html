@@ -15,7 +15,10 @@
   .bar{-webkit-app-region:drag;display:flex;align-items:center;justify-content:space-between;
     padding:9px 12px;border-bottom:1px solid rgba(55,208,230,.16);cursor:move}
   .bar h1{font-size:14px;letter-spacing:6px;color:var(--accent);text-shadow:0 0 12px rgba(55,208,230,.5)}
-  .bar .dot{width:7px;height:7px;border-radius:50%;background:#37e69a;box-shadow:0 0 8px #37e69a}
+  .ctl{-webkit-app-region:no-drag;display:flex;align-items:center;gap:12px}
+  .ctl span{cursor:pointer;color:var(--muted);font-size:15px;line-height:1}
+  .ctl span:hover{color:var(--accent)}
+  .ctl .dot{width:7px;height:7px;border-radius:50%;background:#37e69a;box-shadow:0 0 8px #37e69a;cursor:default}
   #core{flex:1;width:100%;display:block;min-height:0}
   .status{text-align:center;font-size:14px;letter-spacing:5px;color:var(--accent);
     text-transform:uppercase;padding:2px 0 2px;text-shadow:0 0 12px rgba(55,208,230,.5)}
@@ -28,7 +31,14 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="bar"><h1>JARVIS</h1><span class="dot" id="dot"></span></div>
+  <div class="bar">
+    <h1>JARVIS</h1>
+    <div class="ctl">
+      <span id="pin" title="Pin on top">📌</span>
+      <span id="min" title="Minimize">—</span>
+      <span class="dot" id="dot"></span>
+    </div>
+  </div>
   <canvas id="core"></canvas>
   <div class="status" id="status">STANDBY</div>
   <div class="sub" id="sub">awaiting "Jarvis"</div>
@@ -80,6 +90,9 @@ async function tick(){try{const s=await(await fetch("/state")).json();const st=s
   $("dot").style.background=st==="off"?"#e6a437":"#37e69a";
  }catch(e){statusName="off";target=FEEL.off;$("status").textContent="OFFLINE";$("sub").textContent="starting…";}}
 tick();setInterval(tick,1000);
+// title-bar controls (wired to the pywebview window)
+$("min").onclick=()=>{ if(window.pywebview&&pywebview.api) pywebview.api.minimize(); };
+$("pin").onclick=async()=>{ if(window.pywebview&&pywebview.api){ const on=await pywebview.api.toggle_top(); $("pin").style.opacity=on?"1":"0.35"; } };
 </script>
 </body>
 </html>
