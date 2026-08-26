@@ -60,11 +60,13 @@ def main() -> None:
 
     class Api:
         """Exposed to the widget page so its title-bar buttons can control
-        the frameless window (minimize / toggle always-on-top)."""
+        the frameless window (minimize / pin / open full dashboard)."""
 
-        def __init__(self):
+        def __init__(self, port):
             self.window = None
             self.on_top = True
+            self.port = port
+            self.dash = None
 
         def minimize(self):
             try:
@@ -80,7 +82,28 @@ def main() -> None:
                 pass
             return self.on_top
 
-    api = Api()
+        def open_dashboard(self):
+            # full HUD in its own normal, maximized window
+            try:
+                self.dash = webview.create_window(
+                    "Jarvis Dashboard",
+                    url=f"http://localhost:{self.port}/",
+                    width=1280,
+                    height=800,
+                    maximized=True,
+                )
+            except Exception:
+                try:
+                    self.dash = webview.create_window(
+                        "Jarvis Dashboard",
+                        url=f"http://localhost:{self.port}/",
+                        width=1280,
+                        height=800,
+                    )
+                except Exception:
+                    pass
+
+    api = Api(args.port)
 
     # Start at a guaranteed-visible spot; dock() refines to the right edge
     # after start using pywebview's own screen units, clamped fully on-screen.

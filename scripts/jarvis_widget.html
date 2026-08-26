@@ -35,6 +35,7 @@
     <h1>JARVIS</h1>
     <div class="ctl">
       <span id="pin" title="Pin on top">📌</span>
+      <span id="max" title="Open full dashboard">⛶</span>
       <span id="min" title="Minimize">—</span>
       <span class="dot" id="dot"></span>
     </div>
@@ -92,6 +93,7 @@ async function tick(){try{const s=await(await fetch("/state")).json();const st=s
 tick();setInterval(tick,1000);
 // title-bar controls (wired to the pywebview window)
 $("min").onclick=()=>{ if(window.pywebview&&pywebview.api) pywebview.api.minimize(); };
+$("max").onclick=()=>{ if(window.pywebview&&pywebview.api) pywebview.api.open_dashboard(); };
 $("pin").onclick=async()=>{ if(window.pywebview&&pywebview.api){ const on=await pywebview.api.toggle_top(); $("pin").style.opacity=on?"1":"0.35"; } };
 </script>
 </body>
