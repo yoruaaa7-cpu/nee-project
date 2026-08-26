@@ -66,7 +66,6 @@ def main() -> None:
             self.window = None
             self.on_top = True
             self.port = port
-            self.dash = None
 
         def minimize(self):
             try:
@@ -83,25 +82,15 @@ def main() -> None:
             return self.on_top
 
         def open_dashboard(self):
-            # full HUD in its own normal, maximized window
+            # Open the full HUD in the system default browser. Spawning a
+            # second native pywebview window from a JS-API callback crashes
+            # the WebView2 process on Windows, so we deliberately avoid it.
+            import webbrowser
+
             try:
-                self.dash = webview.create_window(
-                    "Jarvis Dashboard",
-                    url=f"http://localhost:{self.port}/",
-                    width=1280,
-                    height=800,
-                    maximized=True,
-                )
+                webbrowser.open(f"http://localhost:{self.port}/")
             except Exception:
-                try:
-                    self.dash = webview.create_window(
-                        "Jarvis Dashboard",
-                        url=f"http://localhost:{self.port}/",
-                        width=1280,
-                        height=800,
-                    )
-                except Exception:
-                    pass
+                pass
 
     api = Api(args.port)
 
