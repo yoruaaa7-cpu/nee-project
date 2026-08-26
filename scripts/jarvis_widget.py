@@ -82,15 +82,24 @@ def main() -> None:
             return self.on_top
 
         def open_dashboard(self):
-            # Open the full HUD in the system default browser. Spawning a
-            # second native pywebview window from a JS-API callback crashes
-            # the WebView2 process on Windows, so we deliberately avoid it.
+            # Open the full HUD in the system default browser. Two hazards to
+            # avoid on Windows/WebView2: (1) a second native pywebview window
+            # from here crashes the GUI process; (2) js_api callbacks run ON
+            # the GUI thread, so any blocking work freezes the widget ("Python
+            # is not responding"). So we launch the browser on a daemon thread
+            # and return immediately.
+            import threading
             import webbrowser
 
-            try:
-                webbrowser.open(f"http://localhost:{self.port}/")
-            except Exception:
-                pass
+            url = f"http://localhost:{self.port}/"
+
+            def go():
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+
+            threading.Thread(target=go, daemon=True).start()
 
     api = Api(args.port)
 
