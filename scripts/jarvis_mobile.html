@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<title>Jarvis</title>
+<style>
+  :root{--accent:#37d0e6;--bg:#03070d;--panel:#0a1620;--muted:#5a8894;--text:#cdeef4}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,"SF Pro Text",system-ui,sans-serif}
+  body{display:flex;flex-direction:column;height:100dvh}
+  header{display:flex;align-items:center;justify-content:space-between;
+    padding:calc(env(safe-area-inset-top) + 12px) 18px 12px;border-bottom:1px solid rgba(55,208,230,.2)}
+  header h1{margin:0;font-size:18px;letter-spacing:6px;color:var(--accent);
+    text-shadow:0 0 14px rgba(55,208,230,.5)}
+  header .st{font-size:11px;color:var(--muted);letter-spacing:1px}
+  #log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .msg{max-width:82%;padding:11px 14px;border-radius:16px;font-size:15px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word}
+  .me{align-self:flex-end;background:var(--accent);color:#04121a;border-bottom-right-radius:5px}
+  .jv{align-self:flex-start;background:var(--panel);border:1px solid rgba(55,208,230,.22);border-bottom-left-radius:5px}
+  .think{align-self:flex-start;color:var(--muted);font-size:13px;font-style:italic}
+  form{display:flex;gap:8px;padding:12px 12px calc(env(safe-area-inset-bottom) + 12px);
+    border-top:1px solid rgba(55,208,230,.2)}
+  input{flex:1;background:var(--panel);border:1px solid rgba(55,208,230,.28);color:var(--text);
+    border-radius:22px;padding:12px 16px;font-size:16px;outline:none}
+  button{background:var(--accent);color:#04121a;border:none;border-radius:22px;
+    padding:0 18px;font-size:16px;font-weight:600;cursor:pointer}
+  button.mic{width:46px;padding:0;font-size:20px}
+  .speak{color:var(--muted);font-size:11px;display:flex;align-items:center;gap:5px}
+</style>
+</head>
+<body>
+  <header>
+    <h1>JARVIS</h1>
+    <label class="speak"><input type="checkbox" id="tts" checked> speak replies</label>
+  </header>
+  <div id="log">
+    <div class="msg jv">At your service, sir. Ask me anything, or tap the mic.</div>
+  </div>
+  <form id="f">
+    <input id="q" placeholder="Message Jarvis…" autocomplete="off" autocapitalize="sentences">
+    <button type="button" class="mic" id="mic" title="Speak">🎤</button>
+    <button type="submit">Send</button>
+  </form>
+
+<script>
+const TOKEN="__TOKEN__";
+const log=document.getElementById("log"), q=document.getElementById("q");
+function add(cls,text){const d=document.createElement("div");d.className="msg "+cls;d.textContent=text;
+  log.appendChild(d);log.scrollTop=log.scrollHeight;return d;}
+function speak(t){
+  if(!document.getElementById("tts").checked||!window.speechSynthesis)return;
+  const u=new SpeechSynthesisUtterance(t);u.rate=1.02;speechSynthesis.cancel();speechSynthesis.speak(u);
+}
+async function ask(text){
+  add("me",text);
+  const th=add("think","Jarvis is thinking…");
+  try{
+    const r=await fetch("/ask",{method:"POST",
+      headers:{"Content-Type":"application/json","Authorization":"Bearer "+TOKEN},
+      body:JSON.stringify({text})});
+    const j=await r.json();
+    th.remove();
+    const reply=j.reply||j.error||"(no reply)";
+    add("jv",reply);speak(reply);
+  }catch(e){th.remove();add("jv","Couldn't reach Jarvis. Is the PC awake and on the network?");}
+}
+document.getElementById("f").addEventListener("submit",e=>{
+  e.preventDefault();const t=q.value.trim();if(!t)return;q.value="";ask(t);
+});
+// voice input (works best on Android/desktop Chrome; iOS Safari support is limited)
+const mic=document.getElementById("mic");
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SR){
+  const rec=new SR();rec.lang="en-US";rec.interimResults=false;
+  mic.onclick=()=>{try{rec.start();mic.textContent="…";}catch(e){}};
+  rec.onresult=e=>{mic.textContent="🎤";const t=e.results[0][0].transcript;q.value=t;ask(t);q.value="";};
+  rec.onerror=rec.onend=()=>{mic.textContent="🎤";};
+}else{
+  mic.onclick=()=>{q.focus();};  // fall back to keyboard dictation
+}
+</script>
+</body>
+</html>
