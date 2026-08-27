@@ -75,6 +75,53 @@ COMMAND_MAX_SECONDS = 12.0    # hard cap per utterance
 SILENCE_STOP_SECONDS = 1.2    # stop after this much trailing silence
 SPEECH_WAIT_SECONDS = 6.0     # give up if nothing said after the ding
 
+
+def list_audio_devices() -> None:
+    """Print every input/output device with its index, for --mic / --speaker."""
+    try:
+        devices = sd.query_devices()
+    except Exception as exc:
+        print(f"[voice] could not query audio devices: {exc}")
+        return
+    print("\nAudio devices (use the number or any part of the name):\n")
+    for i, d in enumerate(devices):
+        ins, outs = d.get("max_input_channels", 0), d.get("max_output_channels", 0)
+        role = []
+        if ins:
+            role.append("MIC")
+        if outs:
+            role.append("SPEAKER")
+        tag = "/".join(role) or "—"
+        print(f"  [{i:>2}] {tag:<12} {d['name']}")
+    print()
+
+
+def resolve_device(spec: str, kind: str):
+    """Turn a --mic/--speaker value (index or name substring) into a device
+    index. `kind` is 'input' or 'output'. Returns (index, name) or (None, None)
+    if it can't be matched — the caller then falls back to the system default."""
+    if not spec:
+        return None, None
+    try:
+        devices = sd.query_devices()
+    except Exception:
+        return None, None
+    ch_key = "max_input_channels" if kind == "input" else "max_output_channels"
+    # exact index
+    try:
+        idx = int(spec)
+        if 0 <= idx < len(devices):
+            return idx, devices[idx]["name"]
+    except ValueError:
+        pass
+    # case-insensitive name substring, first device with channels of that kind
+    want = spec.lower()
+    for i, d in enumerate(devices):
+        if want in d["name"].lower() and d.get(ch_key, 0) > 0:
+            return i, d["name"]
+    return None, None
+
+
 EXIT_PHRASES = {
     "goodbye", "good bye", "quit", "exit",
     "power down", "power off", "terminate", "kill switch", "shut yourself down",
@@ -148,14 +195,38 @@ def is_wake_command(text: str) -> bool:
 # jar vis...), so we fuzzy-match each word instead of requiring exact spelling.
 import difflib
 
-_JARVIS_THRESHOLD = 0.66
+# Wake-word matching is tunable at startup via --wake-sensitivity:
+#   loose  -> catches almost anything close to "jarvis" (more false wakes)
+#   normal -> similarity + a jarvis-like onset/tell (recommended default)
+#   strict -> only the exact "jarvis" (handled by --wake-strict elsewhere)
+WAKE = {"threshold": 0.78, "guard": True}
+
+# Real mis-hearings of "Jarvis" almost always keep a J/G onset AND the
+# distinctive 'v'. Look-alikes that trip the old matcher — "service",
+# "harvest", "Travis", "carvers", "marvellous" — do not, so requiring both
+# cuts the false wakes without losing genuine ones ("Jervis", "Jarvus",
+# "Garvis", "Jarvez").
+_JARVIS_ONSET = ("j", "g")
+
+
+def _ratio(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, a, b).ratio()
 
 
 def _sounds_like_jarvis(word: str) -> bool:
     w = word.lower().strip(".,!?'\"-:")
     if "jarvis" in w:
         return True
-    return difflib.SequenceMatcher(None, w, "jarvis").ratio() >= _JARVIS_THRESHOLD
+    if not (4 <= len(w) <= 9):
+        return False
+    r = _ratio(w, "jarvis")
+    if r >= 0.85:  # unmistakable — accept regardless of onset
+        return True
+    if r < WAKE["threshold"]:
+        return False
+    if not WAKE["guard"]:  # loose mode: similarity alone is enough
+        return True
+    return w[:1] in _JARVIS_ONSET and "v" in w
 
 
 def _jarvis_word_end(text: str):
@@ -166,8 +237,8 @@ def _jarvis_word_end(text: str):
         if _sounds_like_jarvis(m.group(0)):
             last_end = m.end()
         elif i + 1 < len(words):  # catch a split like "jar vis"
-            pair = (m.group(0) + words[i + 1].group(0)).lower()
-            if difflib.SequenceMatcher(None, pair, "jarvis").ratio() >= 0.7:
+            pair = (m.group(0) + words[i + 1].group(0)).lower().strip(".,!?'\"-:")
+            if pair[:1] in _JARVIS_ONSET and _ratio(pair, "jarvis") >= 0.82:
                 last_end = words[i + 1].end()
     return last_end
 
@@ -1156,6 +1227,31 @@ def main() -> None:
         "containing 'jarvis')",
     )
     parser.add_argument(
+        "--wake-sensitivity",
+        choices=["loose", "normal"],
+        default="normal",
+        help="How forgiving the 'jarvis' match is. 'normal' (default) ignores "
+        "look-alike words like 'service'/'harvest'/'Travis'; 'loose' wakes on "
+        "anything close (more false triggers).",
+    )
+    parser.add_argument(
+        "--mic",
+        default="",
+        help="Microphone to listen on: a device number (see --list-mics) or any "
+        "part of its name, e.g. --mic AirPods. Default: the system default mic.",
+    )
+    parser.add_argument(
+        "--speaker",
+        default="",
+        help="Output device for Jarvis's voice: a device number or name "
+        "substring, e.g. --speaker AirPods. Default: the system default output.",
+    )
+    parser.add_argument(
+        "--list-mics",
+        action="store_true",
+        help="List all audio input/output devices with their numbers, then exit.",
+    )
+    parser.add_argument(
         "--dashboard-port",
         type=int,
         default=8765,
@@ -1203,6 +1299,39 @@ def main() -> None:
         help="Skip text-to-speech (voice input only)",
     )
     args = parser.parse_args()
+
+    # List devices and exit (helps the user find their AirPods' number/name).
+    if args.list_mics:
+        list_audio_devices()
+        return
+
+    # Wake-word forgiveness.
+    if args.wake_sensitivity == "loose":
+        WAKE["threshold"], WAKE["guard"] = 0.66, False
+    else:  # normal
+        WAKE["threshold"], WAKE["guard"] = 0.78, True
+
+    # Pin the microphone / speaker if the user named one. Setting
+    # sd.default.device routes every stream and playback below through it —
+    # so AirPods (or any chosen device) are used consistently.
+    mic_idx, mic_name = resolve_device(args.mic, "input")
+    spk_idx, spk_name = resolve_device(args.speaker, "output")
+    if args.mic and mic_idx is None:
+        print(f"[voice] mic '{args.mic}' not found; using the default. "
+              f"Run with --list-mics to see the exact name/number.")
+    if args.speaker and spk_idx is None:
+        print(f"[voice] speaker '{args.speaker}' not found; using the default.")
+    cur_in, cur_out = sd.default.device  # (input, output)
+    sd.default.device = (
+        mic_idx if mic_idx is not None else cur_in,
+        spk_idx if spk_idx is not None else cur_out,
+    )
+    if mic_idx is not None:
+        print(f"[voice] microphone: [{mic_idx}] {mic_name}")
+        log_event("system", f"Mic: {mic_name}")
+    if spk_idx is not None:
+        print(f"[voice] speaker: [{spk_idx}] {spk_name}")
+        log_event("system", f"Speaker: {spk_name}")
 
     # One-time login flow: open the profile browser, let the user sign in, exit.
     if args.browser_login:
